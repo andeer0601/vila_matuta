@@ -15,6 +15,7 @@
     "test:demo-http": "node scripts/test-demo-http.cjs"
   },
   "dependencies": {
+    "@next/env": "15.5.28",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.45.1",
     "clsx": "^2.1.1",
