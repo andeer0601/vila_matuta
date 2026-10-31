@@ -1,0 +1,16 @@
+services:
+  # Optional plain PostgreSQL for SQL experiments; not a replacement for Supabase Auth.
+  # Production migrations require the auth schema and Supabase roles.
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a local POSTGRES_PASSWORD}
+      POSTGRES_DB: vilamatuta
+    ports:
+      - "127.0.0.1:54322:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:

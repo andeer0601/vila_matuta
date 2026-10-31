@@ -1,0 +1,27 @@
+node_modules/
+.next/
+.env
+.env.local
+.env.*.local
+*.tsbuildinfo
+tmp/
+
+.env.*
+!.env.example
+*.pem
+*.key
+backups/
+
+# Local/generated artifacts; keep reference material on disk only.
+next-env.d.ts
+*.log
+coverage/
+.vercel/
+.netlify/
+.aws/
+.codex/
+.agents/
+.DS_Store
+Thumbs.db
+/Cardapio Novo Vila Matuta novo.pdf
+/docs/*.png

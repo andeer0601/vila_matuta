@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 38 30% 97%;
+    --foreground: 24 35% 15%;
+    --primary: 21 90% 48%;
+    --primary-foreground: 0 0% 100%;
+    --wood: 25 31% 28%;
+    --wood-light: 28 35% 36%;
+    --leather: 30 40% 90%;
+    --sand: 35 30% 94%;
+    --border-rustic: 28 25% 82%;
+  }
+
+  body {
+    background-color: #FDFBF7;
+    color: #27170E;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Georgia', 'Cambria', serif;
+    letter-spacing: -0.01em;
+  }
+}
+
+/* Utilitários Western & Rustic */
+.bg-wood-grain {
+  background-color: #5C4033;
+  background-image: radial-gradient(#6e4d3e 0.75px, transparent 0.75px), radial-gradient(#6e4d3e 0.75px, #5C4033 0.75px);
+  background-size: 30px 30px;
+  background-position: 0 0, 15px 15px;
+}
+
+.rustic-card {
+  background-color: #FFFFFF;
+  border: 1px solid #EDE0D4;
+  border-radius: 1rem;
+  box-shadow: 0 4px 20px -2px rgba(92, 64, 51, 0.07), 0 2px 6px -1px rgba(92, 64, 51, 0.04);
+  transition: all 0.2s ease-in-out;
+}
+
+.rustic-card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -4px rgba(92, 64, 51, 0.12), 0 4px 10px -2px rgba(92, 64, 51, 0.06);
+  border-color: #DDB892;
+}
+
+.leather-border {
+  border: 2px dashed #B08968;
+}
+
+.stitching-detail {
+  position: relative;
+}
+
+.stitching-detail::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1px dashed rgba(176, 137, 104, 0.45);
+  border-radius: 0.85rem;
+  pointer-events: none;
+}
+
+.badge-dietary-warning {
+  background-color: #FEF2F2;
+  color: #991B1B;
+  border: 1px solid #FECACA;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F5F0EB;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #DDB892;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B08968;
+}
+
+@layer components {
+  .field { @apply w-full rounded-xl border border-[#9B7B5E] bg-white px-3 py-3 text-sm text-[#493021] outline-none focus:ring-2 focus:ring-[#C66B13]; }
+  .button-primary { @apply inline-flex items-center justify-center gap-2 rounded-xl bg-[#B94B0B] px-6 py-3.5 font-bold text-white transition hover:bg-[#963B08] disabled:opacity-40 disabled:cursor-not-allowed; }
+  .button-secondary { @apply inline-flex items-center justify-center gap-2 rounded-xl border border-[#A88A69] px-5 py-3 font-semibold text-[#493021] transition hover:bg-[#F3E7D5] disabled:opacity-40; }
+  .eyebrow { @apply text-xs font-bold tracking-[.15em] text-[#995009]; }
+  .choice { @apply rounded-xl border border-[#9B7B5E] bg-white text-[#493021] transition hover:border-[#B94B0B]; }
+  .choice.selected { @apply border-[#B94B0B] bg-[#FFF1D9] ring-1 ring-[#B94B0B]; }
+  .notice { @apply rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900; }
+}
+.hero-honey { background: radial-gradient(ellipse at 90% 10%, #edaa32 0%, transparent 60%), linear-gradient(125deg,#fff3d5,#f8d180); }
+:focus-visible { outline: 3px solid #C66B13; outline-offset: 3px; }
+html { scroll-behavior: smooth; scroll-padding-top: 150px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
+
+.skip-link { position: fixed; left: 1rem; top: -100px; z-index: 100; padding: 12px 20px; background: #fff; color: #493021; border: 2px solid #493021; border-radius: 8px; }
+.skip-link:focus { top: 1rem; }
+button, a, input, select, textarea { touch-action: manipulation; }
+button { min-height: 36px; }
+input, select, textarea { max-width: 100%; }
+progress { height: .6rem; }
+@media (max-width: 640px) { input, select, textarea, .field { font-size: 16px; } h1.text-4xl { font-size: 2rem; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; scroll-behavior: auto !important; } }
+
+@media print { body > div, header, footer, button, .skip-link { display: none !important; } main { display: block !important; } .rustic-card { box-shadow: none; break-inside: avoid; } [class*="overflow-y-auto"] { max-height: none !important; overflow: visible !important; } }
