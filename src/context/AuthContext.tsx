@@ -32,7 +32,7 @@ export function AuthProvider({children}:{children:React.ReactNode}) {
     const {data:{subscription}}=supabase.auth.onAuthStateChange(()=>{setTimeout(()=>void load(),0);});
     return ()=>subscription.unsubscribe();
   },[]);
-  useEffect(()=>{if(!DEMO_MODE||!user)return;const sync=()=>{const p=readLocal<Record<string,Profile>>('vm_profiles',{})[user.id];if(p)setUser(p);};window.addEventListener('vm-update',sync);return()=>window.removeEventListener('vm-update',sync);},[user?.id]);
+  useEffect(()=>{if(!DEMO_MODE||!user)return;const sync=()=>{if(readLocal<string>('vm_demo_session','signed-out')!==user.id)return;const p=readLocal<Record<string,Profile>>('vm_profiles',{})[user.id];if(p)setUser(p);};window.addEventListener('vm-update',sync);return()=>window.removeEventListener('vm-update',sync);},[user?.id]);
   const loginAs:AuthState['loginAs']=(type)=>{
     if(!DEMO_MODE)return;
     const id=type==='admin'?'user-admin':type==='customer2'?'user-customer-2':'user-customer-1';

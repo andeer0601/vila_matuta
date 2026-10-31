@@ -60,17 +60,17 @@ export default function ShoppingListPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#EDE0D4]">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-[#EDE0D4]">
+        <div className="flex items-start gap-3 min-w-0">
           <Link
             href="/admin"
-            className="p-2 bg-[#F5F0EB] hover:bg-[#EDE0D4] text-[#5C4033] rounded-xl transition"
+            className="shrink-0 p-2 bg-[#F5F0EB] hover:bg-[#EDE0D4] text-[#5C4033] rounded-xl transition"
             title="Voltar ao Painel"
           >
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="px-3 py-1 rounded-full bg-[#B94B0B] text-white text-xs font-bold uppercase tracking-wider">
                 Ficha Técnica & Compras
               </span>
@@ -132,13 +132,13 @@ export default function ShoppingListPage() {
           </div>
 
           {filterMode !== 'all' && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center shrink-0">
               <label className="text-xs font-bold text-[#5C4033] uppercase">Data Base:</label>
               <input
                 type="date" aria-label="Data base do relatório"
                 value={selectedDay}
                 onChange={(e) => setSelectedDay(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-[#DDB892] text-xs text-[#27170E] font-medium outline-none"
+                className="field min-w-0 sm:w-auto"
               />
             </div>
           )}
@@ -189,7 +189,7 @@ export default function ShoppingListPage() {
                 report.itemsByCategory.protein?.map((item) => (
                   <div
                     key={item.ingredientId}
-                    className="p-3 rounded-xl bg-[#FDFBF7] border border-[#EDE0D4] flex items-center justify-between text-xs"
+                    className="p-3 rounded-xl bg-[#FDFBF7] border border-[#EDE0D4] flex flex-wrap items-center justify-between gap-3 text-xs"
                   >
                     <div>
                       <p className="font-bold text-[#5C4033]">{item.name}</p>
@@ -223,7 +223,7 @@ export default function ShoppingListPage() {
                 report.itemsByCategory.base?.map((item) => (
                   <div
                     key={item.ingredientId}
-                    className="p-3 rounded-xl bg-[#FDFBF7] border border-[#EDE0D4] flex items-center justify-between text-xs"
+                    className="p-3 rounded-xl bg-[#FDFBF7] border border-[#EDE0D4] flex flex-wrap items-center justify-between gap-3 text-xs"
                   >
                     <div>
                       <p className="font-bold text-[#5C4033]">{item.name}</p>
@@ -257,7 +257,7 @@ export default function ShoppingListPage() {
                 report.itemsByCategory.side?.map((item) => (
                   <div
                     key={item.ingredientId}
-                    className="p-3 rounded-xl bg-[#FDFBF7] border border-[#EDE0D4] flex items-center justify-between text-xs"
+                    className="p-3 rounded-xl bg-[#FDFBF7] border border-[#EDE0D4] flex flex-wrap items-center justify-between gap-3 text-xs"
                   >
                     <div>
                       <p className="font-bold text-[#5C4033]">{item.name}</p>
@@ -291,7 +291,7 @@ export default function ShoppingListPage() {
                 report.itemsByCategory.complete_dish?.map((item) => (
                   <div
                     key={item.ingredientId}
-                    className="p-3 rounded-xl bg-[#FDFBF7] border border-[#EDE0D4] flex items-center justify-between text-xs"
+                    className="p-3 rounded-xl bg-[#FDFBF7] border border-[#EDE0D4] flex flex-wrap items-center justify-between gap-3 text-xs"
                   >
                     <div>
                       <p className="font-bold text-[#5C4033]">{item.name}</p>
