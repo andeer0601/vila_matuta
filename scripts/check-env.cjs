@@ -1,5 +1,6 @@
 require('@next/env').loadEnvConfig(process.cwd());
 if(process.env.NEXT_PUBLIC_DEMO_MODE==='true'){
+ require('./demo-environment.cjs').stripDemoPlatformMetadata(process.env);
  const errors=require('./demo-environment.cjs').demoEnvironmentErrors(process.env);
  if(errors.length){console.error(errors.join('\n'));process.exit(1);}
  console.log('Public demo configuration validated: local fictional profiles, no real integrations. Use the same flags at build and runtime, a separate HTTPS hostname and no production data.');process.exit(0);

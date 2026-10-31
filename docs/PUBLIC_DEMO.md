@@ -27,6 +27,8 @@ O arquivo `.env.example` documenta ambos os modos; não envie arquivos `.env` co
 
 ## Acessos e dados
 
+Na Vercel, a configuração pública `NEXT_PUBLIC_VERCEL_OBSERVABILITY_CLIENT_CONFIG` pode ser injetada pelo host mesmo com a exposição automática de variáveis desativada. A demo não usa essa integração: o preflight e a configuração do Next removem exclusivamente essa variável antes da validação e compilação, sem ler ou registrar seu valor. Isso não libera outras variáveis públicas nem credenciais de serviços. O modo real permanece inalterado.
+
 Em `/entrar`, escolha Mariana, Lucas ou Anderson (Administrador), sem senha. Os perfis são públicos e não constituem autenticação ou autorização segura. O painel de administração é intencionalmente acessível para teste.
 
 Pedidos, endereços, preferências e carrinhos ficam no navegador. Os três perfis compartilham essa simulação local; outro navegador ou dispositivo terá dados separados. Use apenas dados inventados, inclusive em campos de telefone, endereço e restrições alimentares. Não há envio de pedido à equipe, cobrança ou entrega real.

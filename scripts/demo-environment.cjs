@@ -1,4 +1,9 @@
 // Shared by Next.js startup/build and the deployment preflight. Never print values.
+function stripDemoPlatformMetadata(env) {
+ // The demo does not use Vercel client observability. Drop this host-injected
+ // configuration before Next collects public variables; never allowlist its value.
+ if(env.NEXT_PUBLIC_DEMO_MODE==='true')delete env.NEXT_PUBLIC_VERCEL_OBSERVABILITY_CLIENT_CONFIG;
+}
 function demoEnvironmentErrors(env) {
  const forbidden=['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SUPABASE_ANON_KEY','SUPABASE_SERVICE_ROLE_KEY','INFINITEPAY_HANDLE','NEXT_PUBLIC_TURNSTILE_SITE_KEY','DATA_ENCRYPTION_KEYS','RATE_LIMIT_SECRET'];
  const configured=[...new Set([...forbidden,...Object.keys(env).filter(key=>key.startsWith('NEXT_PUBLIC_')&&key!=='NEXT_PUBLIC_DEMO_MODE')])].filter(key=>!!env[key]);
@@ -7,4 +12,4 @@ function demoEnvironmentErrors(env) {
  if(env.PAYMENTS_ENABLED!=='false')errors.push('Demo requires PAYMENTS_ENABLED=false explicitly.');
  return errors;
 }
-module.exports={demoEnvironmentErrors};
+module.exports={demoEnvironmentErrors,stripDemoPlatformMetadata};

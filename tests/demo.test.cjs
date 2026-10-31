@@ -32,6 +32,19 @@ test('actual Next config and preflight agree on safe and unsafe demo environment
  const {spawnSync}=require('node:child_process');const base={...process.env,NODE_ENV:'production',NEXT_PUBLIC_DEMO_MODE:'true',PAYMENTS_ENABLED:'false'};
  for(const key of Object.keys(base))if(key.startsWith('NEXT_PUBLIC_')&&key!=='NEXT_PUBLIC_DEMO_MODE')delete base[key];
  for(const key of ['SUPABASE_SERVICE_ROLE_KEY','INFINITEPAY_HANDLE','DATA_ENCRYPTION_KEYS','RATE_LIMIT_SECRET'])delete base[key];
- const cases=[{}, {PAYMENTS_ENABLED:undefined},{PAYMENTS_ENABLED:'true'},{PAYMENTS_ENABLED:'0'},{NEXT_PUBLIC_UNEXPECTED_SECRET:'fake'},{NEXT_PUBLIC_SUPABASE_URL:'https://example.invalid'},{SUPABASE_SERVICE_ROLE_KEY:'fake'},{DATA_ENCRYPTION_KEYS:'fake'},{RATE_LIMIT_SECRET:'fake'}];
- for(const extra of cases){const env={...base,...extra};for(const key of Object.keys(env))if(env[key]===undefined)delete env[key];const next=spawnSync(process.execPath,['--input-type=module','-e',"await import('./next.config.mjs')"],{env,encoding:'utf8'});const preflight=spawnSync(process.execPath,['scripts/check-env.cjs'],{env,encoding:'utf8'});const expected=Object.keys(extra).length?1:0;assert.equal(next.status,expected,'Next config: '+Object.keys(extra));assert.equal(preflight.status,expected,'Preflight: '+Object.keys(extra));}
+ const cases=[{}, {NEXT_PUBLIC_VERCEL_OBSERVABILITY_CLIENT_CONFIG:'fictional-observability-marker'}, {NEXT_PUBLIC_VERCEL_OBSERVABILITY_CLIENT_CONFIG:'fictional-observability-marker',SUPABASE_SERVICE_ROLE_KEY:'fake'}, {NEXT_PUBLIC_VERCEL_OBSERVABILITY_CLIENT_CONFIG_EXTRA:'fake'}, {PAYMENTS_ENABLED:undefined},{PAYMENTS_ENABLED:'true'},{PAYMENTS_ENABLED:'0'},{NEXT_PUBLIC_UNEXPECTED_SECRET:'fake'},{NEXT_PUBLIC_SUPABASE_URL:'https://example.invalid'},{SUPABASE_SERVICE_ROLE_KEY:'fake'},{DATA_ENCRYPTION_KEYS:'fake'},{RATE_LIMIT_SECRET:'fake'}];
+ for(const extra of cases){const env={...base,...extra};for(const key of Object.keys(env))if(env[key]===undefined)delete env[key];const next=spawnSync(process.execPath,['--input-type=module','-e',"await import('./next.config.mjs'); if(process.env.NEXT_PUBLIC_VERCEL_OBSERVABILITY_CLIENT_CONFIG!==undefined)throw new Error('Host metadata was retained')"],{env,encoding:'utf8'});const preflight=spawnSync(process.execPath,['scripts/check-env.cjs'],{env,encoding:'utf8'});const expected=Object.keys(extra).some(key=>key!=='NEXT_PUBLIC_VERCEL_OBSERVABILITY_CLIENT_CONFIG')?1:0;assert.equal(next.status,expected,'Next config: '+Object.keys(extra));assert.equal(preflight.status,expected,'Preflight: '+Object.keys(extra));}
+});
+
+
+test('demo drops only unused host observability metadata and still rejects secrets',()=>{
+ const {stripDemoPlatformMetadata,demoEnvironmentErrors}=require('../scripts/demo-environment.cjs');
+ const key='NEXT_PUBLIC_VERCEL_OBSERVABILITY_CLIENT_CONFIG';
+ for(const flag of ['true','false',undefined]){
+  const env={NEXT_PUBLIC_DEMO_MODE:flag,PAYMENTS_ENABLED:'false',[key]:'fictional-observability-marker',SUPABASE_SERVICE_ROLE_KEY:'fake',NEXT_PUBLIC_UNEXPECTED_SECRET:'fake'};
+  stripDemoPlatformMetadata(env);
+  assert.equal(env[key],flag==='true'?undefined:'fictional-observability-marker');
+  assert.equal(env.SUPABASE_SERVICE_ROLE_KEY,'fake');assert.equal(env.NEXT_PUBLIC_UNEXPECTED_SECRET,'fake');
+  const errors=demoEnvironmentErrors(env).join(' ');assert.match(errors,/SUPABASE_SERVICE_ROLE_KEY/);assert.match(errors,/NEXT_PUBLIC_UNEXPECTED_SECRET/);
+ }
 });

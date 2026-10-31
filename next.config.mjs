@@ -1,5 +1,6 @@
 import demoEnvironment from './scripts/demo-environment.cjs';
 if(process.env.NEXT_PUBLIC_DEMO_MODE==='true'){
+ demoEnvironment.stripDemoPlatformMetadata(process.env);
  const errors=demoEnvironment.demoEnvironmentErrors(process.env);
  if(errors.length)throw new Error(errors.join('\n'));
 }
