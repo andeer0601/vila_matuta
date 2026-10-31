@@ -1,3 +1,12 @@
+## Atualização 31/10/2026 — capacidade por data (implementada; sem publicação)
+
+- 120 unidades é o padrão. O Administrador pode ajustar uma produção futura específica entre 2 e 10.000, sem mudar outros dias; bloqueio total continua em “Marcar sem produção”.
+- Nunca reduzir abaixo de pedidos pagos e reservas de pagamento ainda válidas. Restaurar 120 também respeita esse mínimo. Reservas expiradas e pedidos cancelados não comprometem capacidade.
+- Demo: configurações em localStorage, com o mesmo Web Lock dos pagamentos. Banco: nova migração 20261031_daily_capacity.sql, RPC apenas service_role, verificação de administrador e o mesmo advisory lock 72841921 de reservas/pagamentos.
+- A migração deve ser aplicada antes desta versão em ambiente real. Não foi aplicada a serviço externo. O demo não depende de banco.
+- Montagem, sugestões, agendamento de saldo, remarcação e checkout consultam o limite por data; produção fechada tem disponibilidade zero.
+- A suite usa PGlite: executa SQL e operações enfileiradas, mas não substitui ensaio com múltiplas conexões concorrentes em Postgres real.
+
 # Atualização vigente — demonstração pública (31/10/2026)
 
 Este bloco substitui as afirmações históricas abaixo sobre demo somente em desenvolvimento. Foi solicitada revisão completa de UI/UX, acessibilidade, textos e segurança antes de um teste público; nenhum deploy, conta externa ou pagamento real foi autorizado nesta etapa.

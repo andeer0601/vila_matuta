@@ -1,5 +1,5 @@
 import type { CustomMealSelection, Ingredient } from '@/types/database';
-import { addDateDays, allocated, Capacity, DAILY_CAPACITY, DeliveryPlan, nextAvailableDate, planCount } from './scheduling';
+import { addDateDays, allocated, Capacity, CapacityLimits, productionLimit, DeliveryPlan, nextAvailableDate, planCount } from './scheduling';
 
 export type MealEditor = { id?: string; type: 'custom'|'complete_dish'; base?: Ingredient; protein?: Ingredient; sides: Ingredient[]; dish?: Ingredient; quantity: number; notes: string };
 export type PurchaseDraft = { items: CustomMealSelection[]; plans: DeliveryPlan[]; mode: 'single'|'scheduled'; step: 1|2|3; editor: MealEditor };
@@ -18,13 +18,13 @@ export function migratePurchaseDraft(items: CustomMealSelection[], builder: any)
 
 // Suggest valid deliveries without singles or exceeding a day's capacity.
 // Quantities that cannot fit remain available to schedule later.
-export function suggestDeliveries(items: Pick<CustomMealSelection,'tempId'|'quantity'>[], capacity: Capacity, interval=7, from?: string, id=()=>crypto.randomUUID()): DeliveryPlan[] {
+export function suggestDeliveries(items: Pick<CustomMealSelection,'tempId'|'quantity'>[], capacity: Capacity, interval=7, from?: string, id=()=>crypto.randomUUID(), limits: CapacityLimits = {}): DeliveryPlan[] {
  const remaining = Object.fromEntries(items.map(i=>[i.tempId,i.quantity]));
  const plans: DeliveryPlan[]=[];
  let start=from;
  for(let index=0;index<200 && Object.values(remaining).some(n=>n>=2);index++){
-  const date=nextAvailableDate(start,capacity,2);if(!date)break;
-  let free=DAILY_CAPACITY-(capacity[date]||0);
+  const date=nextAvailableDate(start,capacity,2,limits);if(!date)break;
+  let free=productionLimit(date,limits)-(capacity[date]||0);
   const quantities:Record<string,number>={};
   for(const item of items){let count=Math.min(free,remaining[item.tempId]);if(remaining[item.tempId]-count===1)count--;if(count<2)continue;quantities[item.tempId]=count;remaining[item.tempId]-=count;free-=count;}
   if(Object.keys(quantities).length)plans.push({id:id(),date,quantities});
@@ -34,15 +34,15 @@ export function suggestDeliveries(items: Pick<CustomMealSelection,'tempId'|'quan
 }
 
 // Divide an existing delivery into two when possible; otherwise use unassigned balance.
-export function addSuggestedDelivery(items: Pick<CustomMealSelection,'tempId'|'quantity'>[], plans: DeliveryPlan[], capacity: Capacity, interval=7): DeliveryPlan[] {
+export function addSuggestedDelivery(items: Pick<CustomMealSelection,'tempId'|'quantity'>[], plans: DeliveryPlan[], capacity: Capacity, interval=7, limits: CapacityLimits = {}): DeliveryPlan[] {
  const remaining=items.map(i=>({...i,quantity:i.quantity-allocated(plans,i.tempId)})).filter(i=>i.quantity>=2);
  const last=plans.map(p=>p.date).filter(Boolean).sort().at(-1);
- const blocked={...capacity,...Object.fromEntries(plans.map(p=>[p.date,DAILY_CAPACITY]))};
- if(remaining.length){const [next]=suggestDeliveries(remaining,blocked,interval,last?addDateDays(last,interval):undefined);return next?[...plans,next]:plans;}
+ const blocked={...capacity,...Object.fromEntries(plans.map(p=>[p.date,productionLimit(p.date,limits)]))};
+ if(remaining.length){const [next]=suggestDeliveries(remaining,blocked,interval,last?addDateDays(last,interval):undefined,undefined,limits);return next?[...plans,next]:plans;}
  const source=[...plans].reverse().find(p=>Object.values(p.quantities).some(n=>n>=4));
  if(!source)return plans;
  const quantities=Object.fromEntries(Object.entries(source.quantities).filter(([,n])=>n>=4).map(([key,n])=>[key,Math.floor(n/2)]));
- const date=nextAvailableDate(last?addDateDays(last,interval):undefined,blocked,planCount({quantities} as DeliveryPlan));
+ const date=nextAvailableDate(last?addDateDays(last,interval):undefined,blocked,planCount({quantities} as DeliveryPlan),limits);
  if(!date)return plans;
  return [...plans.map(p=>p.id===source.id?{...p,quantities:Object.fromEntries(Object.entries(p.quantities).map(([key,n])=>[key,n-(quantities[key]||0)]))}:p),{id:crypto.randomUUID(),date,quantities,period:source.period}];
 }

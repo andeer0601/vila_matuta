@@ -2,17 +2,17 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useRef } from 'react';
 import { CustomMealSelection, Order } from '@/types/database';
 import { calculateVolumePrice } from '@/lib/rules';
-import { allocated, Capacity, capacityFromOrders, DeliveryPlan, validatePlan } from '@/lib/scheduling';
+import { allocated, Capacity, CapacityLimits, capacityFromOrders, DeliveryPlan, validatePlan } from '@/lib/scheduling';
 import { useAuth } from './AuthContext';
 import { DEMO_MODE } from '@/lib/mode';
 import { api } from '@/lib/api';
 import { PurchaseDraft, emptyPurchaseDraft, choosePurchaseDraft, migratePurchaseDraft } from '@/lib/purchase-draft';
-import {demoLock,getSettings,readLocal,storageKey,writeLocal,profileAddress} from '@/lib/operations';
+import {demoLock,settingsLimits,ShopSettings,getSettings,readLocal,storageKey,writeLocal,profileAddress} from '@/lib/operations';
 type CreateOrderData = { deliveries: DeliveryPlan[]; notes?:string };
 interface CartState {
   draft:PurchaseDraft; draftReady:boolean; draftConflict:boolean; resolveDraft:(choice:'guest'|'saved')=>void; patchDraft:(patch:Partial<PurchaseDraft>)=>void;
   isLoading:boolean; loadError:string; reservePayment:(id:string)=>Promise<void>; items:CustomMealSelection[]; totalMealsCount:number; pricing:ReturnType<typeof calculateVolumePrice>;
-  creditsBalance:number; orders:Order[]; capacity:Capacity;
+  creditsBalance:number; orders:Order[]; capacity:Capacity; capacityLimits:CapacityLimits;
   editItem:(id:string,item:Omit<CustomMealSelection,'tempId'>)=>void;
   addItem:(item:Omit<CustomMealSelection,'tempId'>)=>void;
   updateItemQuantity:(id:string,delta:number)=>void; removeItem:(id:string)=>void; clearCart:()=>void;
@@ -27,7 +27,7 @@ const STORAGE='vm_demo_orders_v2';
 export function CartProvider({children}:{children:React.ReactNode}) {
   const {user,role,isLoading:authLoading}=useAuth();
   const [isLoading,setLoading]=useState(true);const [loadError,setLoadError]=useState('');const [draftOwner,setDraftOwner]=useState('');
-  const [closures,setClosures]=useState<string[]>([]);
+  const [capacityLimits,setCapacityLimits]=useState<CapacityLimits>({});
   const [draft,setDraft]=useState<PurchaseDraft>(emptyPurchaseDraft);
   const items=draft.items;
   const setItems=(update:CustomMealSelection[]|((previous:CustomMealSelection[])=>CustomMealSelection[]))=>setDraft(previous=>({...previous,items:typeof update==='function'?update(previous.items):update}));
@@ -43,12 +43,12 @@ export function CartProvider({children}:{children:React.ReactNode}) {
    }clearGuest();setDraftConflict(false);};
   const [orders,setOrders]=useState<Order[]>([]);
   const [remoteCapacity,setRemoteCapacity]=useState<Capacity>({});
-  const capacity=useMemo(()=>DEMO_MODE?{...capacityFromOrders(orders),...Object.fromEntries(closures.map(d=>[d,120]))}:remoteCapacity,[orders,remoteCapacity,closures]);
+  const capacity=useMemo(()=>DEMO_MODE?capacityFromOrders(orders):remoteCapacity,[orders,remoteCapacity]);
   const refresh=async()=>{
     setLoading(true);setLoadError('');try{
-    if(DEMO_MODE){setOrders(readLocal<Order[]>(STORAGE,[]));setClosures((await getSettings()).closures.map(d=>d.production_date));return;}
+    if(DEMO_MODE){setOrders(readLocal<Order[]>(STORAGE,[]));setCapacityLimits(settingsLimits(await getSettings()));return;}
     const availability=await fetch('/api/availability',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Não foi possível consultar a produção. Tente novamente.');return r.json();});
-    setRemoteCapacity(availability.capacity||{});
+    setRemoteCapacity(availability.capacity||{});setCapacityLimits(availability.limits||{});
     if(user){const data=await api('/api/orders');setOrders(data.orders);}else setOrders([]);
     }catch(e){setLoadError(e instanceof Error?e.message:'Falha ao carregar pedidos.');throw e;}finally{setLoading(false);}
   };
@@ -76,7 +76,7 @@ export function CartProvider({children}:{children:React.ReactNode}) {
   const createOrder:CartState['createOrder']=async(data)=>{
     if(!user)throw new Error('Entre na sua conta antes de finalizar.');
     if(loadError)throw new Error(loadError);
-    const error=validatePlan(items,data.deliveries,capacity);if(error)throw new Error(error);
+    const error=validatePlan(items,data.deliveries,capacity,false,undefined,capacityLimits);if(error)throw new Error(error);
     if(!DEMO_MODE){const fingerprint=JSON.stringify({items,...data});const key='vm_submit_'+user.id;const previous=readLocal<{id:string;fingerprint:string}|null>(key,null);const requestId=previous?.fingerprint===fingerprint?previous.id:crypto.randomUUID();localStorage.setItem(storageKey(key),JSON.stringify({id:requestId,fingerprint}));const result=await api('/api/orders',{requestId,items,deliveries:data.deliveries,notes:data.notes});localStorage.removeItem(storageKey(key));setOrders(prev=>[result.order,...prev]);setDraft(emptyPurchaseDraft());void refresh().catch(()=>{});return result.order;}
     const id=crypto.randomUUID();
     const order:Order={id,user_id:user.id,order_type:data.deliveries.length>1?'package':'single',status:'pending',total_amount:calculateVolumePrice(totalMealsCount).totalPrice,quantity_meals:totalMealsCount,delivery_date:data.deliveries[0]?.date||null,delivery_shift:user.preferred_delivery_period||null,payment_method:'pix',created_at:new Date().toISOString(),deliveries:data.deliveries.map(p=>({...p,preferred_period:user.preferred_delivery_period,address:profileAddress(user),address_mode:'primary',status:'scheduled'})),profile:user,notes:data.notes,
@@ -88,7 +88,7 @@ export function CartProvider({children}:{children:React.ReactNode}) {
     if(!DEMO_MODE)throw new Error('Alterações de pagamento são confirmadas pelo servidor.');
     const all=latest();const order=all.find(o=>o.id===id);if(!order||!(role==='admin'||order.user_id===user?.id))throw new Error('Pedido indisponível.');
     if(status==='paid'&&order.status==='pending'){
-      const error=validatePlan((order.items||[]).map(i=>({tempId:i.id,quantity:i.quantity})),order.deliveries||[],{...capacityFromOrders(all.filter(o=>o.id!==id)),...Object.fromEntries(closures.map(d=>[d,120]))});
+      const error=validatePlan((order.items||[]).map(i=>({tempId:i.id,quantity:i.quantity})),order.deliveries||[],capacityFromOrders(all.filter(o=>o.id!==id)),false,undefined,settingsLimits(readLocal<ShopSettings>('vm_settings',{whatsapp:'',closures:[]})));
       if(error){order.deliveries=[];order.delivery_date=null;order.needs_rescheduling=true;}
     }else if(role!=='admin')throw new Error('Ação não permitida.');
     persist(all.map(o=>o.id===id?{...o,status,paid_at:status==='paid'?new Date().toISOString():o.paid_at}:o));
@@ -101,10 +101,10 @@ export function CartProvider({children}:{children:React.ReactNode}) {
     plans=plans.map(p=>({...p,preferred_period:user!.preferred_delivery_period,address:profileAddress(user!),address_mode:'primary',status:'scheduled'}));
     const remaining=(order.items||[]).map(i=>({tempId:i.id,quantity:i.quantity-(pending?0:allocated(order.deliveries||[],i.id))})).filter(i=>i.quantity>0);
     if(!pending&&plans.some(p=>(order.deliveries||[]).some(d=>d.date===p.date)))throw new Error('Esta data já tem uma entrega neste pedido. Escolha outra produção.');
-    const error=validatePlan(remaining,plans,{...capacityFromOrders(all.filter(o=>o.id!==id)),...Object.fromEntries(closures.map(d=>[d,120]))});if(error)throw new Error(error);
+    const error=validatePlan(remaining,plans,capacityFromOrders(all.filter(o=>o.id!==id)),false,undefined,settingsLimits(readLocal<ShopSettings>('vm_settings',{whatsapp:'',closures:[]})));if(error)throw new Error(error);
     persist(all.map(o=>o.id===id?{...o,deliveries:pending?plans:[...(o.deliveries||[]),...plans],delivery_date:pending?plans[0].date:o.delivery_date}:o));});
   };
-  const reservePayment=async(id:string)=>{if(!DEMO_MODE)return;await demoLock(()=>{const all=latest();const order=all.find(o=>o.id===id&&o.user_id===user?.id);if(!order||order.status!=='pending')throw new Error('Pedido indisponível.');if(order.reservation_expires_at&&Date.parse(order.reservation_expires_at)>Date.now())return;const error=validatePlan((order.items||[]).map(i=>({tempId:i.id,quantity:i.quantity})),order.deliveries||[],{...capacityFromOrders(all.filter(o=>o.id!==id)),...Object.fromEntries(readLocal<{closures:{production_date:string}[]}>('vm_settings',{closures:[]}).closures.map(d=>[d.production_date,120]))});if(error)throw new Error(error);order.reservation_expires_at=new Date(Date.now()+30*60000).toISOString();persist(all);});};
-  return <CartContext.Provider value={{draft,draftReady,draftConflict,resolveDraft,patchDraft,isLoading,loadError,reservePayment,items,orders,capacity,totalMealsCount,pricing:calculateVolumePrice(totalMealsCount),creditsBalance,addItem,editItem:(id,item)=>setItems(prev=>prev.map(i=>i.tempId===id?{...item,tempId:id}:i)),updateItemQuantity:(id,delta)=>setItems(prev=>prev.map(i=>i.tempId===id?{...i,quantity:Math.max(2,i.quantity+delta)}:i)),removeItem:id=>setItems(prev=>prev.filter(i=>i.tempId!==id)),clearCart:()=>setDraft(emptyPurchaseDraft()),createOrder,updateOrderStatus,updateOrderAdmin,scheduleBalance,refresh}}>{children}</CartContext.Provider>;
+  const reservePayment=async(id:string)=>{if(!DEMO_MODE)return;await demoLock(()=>{const all=latest();const order=all.find(o=>o.id===id&&o.user_id===user?.id);if(!order||order.status!=='pending')throw new Error('Pedido indisponível.');if(order.reservation_expires_at&&Date.parse(order.reservation_expires_at)>Date.now())return;const error=validatePlan((order.items||[]).map(i=>({tempId:i.id,quantity:i.quantity})),order.deliveries||[],capacityFromOrders(all.filter(o=>o.id!==id)),false,undefined,settingsLimits(readLocal<ShopSettings>('vm_settings',{whatsapp:'',closures:[]})));if(error)throw new Error(error);order.reservation_expires_at=new Date(Date.now()+30*60000).toISOString();persist(all);});};
+  return <CartContext.Provider value={{draft,draftReady,draftConflict,resolveDraft,patchDraft,isLoading,loadError,reservePayment,items,orders,capacity,capacityLimits,totalMealsCount,pricing:calculateVolumePrice(totalMealsCount),creditsBalance,addItem,editItem:(id,item)=>setItems(prev=>prev.map(i=>i.tempId===id?{...item,tempId:id}:i)),updateItemQuantity:(id,delta)=>setItems(prev=>prev.map(i=>i.tempId===id?{...i,quantity:Math.max(2,i.quantity+delta)}:i)),removeItem:id=>setItems(prev=>prev.filter(i=>i.tempId!==id)),clearCart:()=>setDraft(emptyPurchaseDraft()),createOrder,updateOrderStatus,updateOrderAdmin,scheduleBalance,refresh}}>{children}</CartContext.Provider>;
 }
 export const useCart=()=>useContext(CartContext);

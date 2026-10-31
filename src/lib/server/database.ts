@@ -34,12 +34,16 @@ export function failure(error:unknown) {
  const expected=error instanceof ApiError;const status=expected?error.status:500;
  return NextResponse.json({error:expected?error.message:'Não foi possível concluir a operação. Tente novamente ou fale com a equipe.'},{status,headers:{'Cache-Control':'no-store',...(expected&&error.retryAfter?{'Retry-After':String(error.retryAfter)}:{})}});
 }
-export async function availability() {
-  const {data,error}=await database().from('production_capacity').select('delivery_date,quantity');
-  if(error)throw new ApiError('Não foi possível consultar a produção.');
-  const capacity:Record<string,number>={};for(const r of data||[])capacity[r.delivery_date]=(capacity[r.delivery_date]||0)+r.quantity;
-  const {data:closures,error:closureError}=await database().from('production_closures').select('production_date');
-  if(closureError)throw new ApiError('Não foi possível consultar o calendário.');
-  for(const day of closures||[])capacity[day.production_date]=120;
-  return capacity;
+export async function productionAvailability() {
+ const db=database();
+ const [occupied,overrides,closed]=await Promise.all([
+  db.from('production_capacity').select('delivery_date,quantity'),
+  db.from('production_limits').select('production_date,capacity'),
+  db.from('production_closures').select('production_date')
+ ]);
+ if(occupied.error||overrides.error||closed.error)throw new ApiError('Não foi possível consultar a produção.');
+ const capacity:Record<string,number>={};for(const r of occupied.data||[])capacity[r.delivery_date]=(capacity[r.delivery_date]||0)+r.quantity;
+ const limits:Record<string,number>={};for(const r of overrides.data||[])limits[r.production_date]=r.capacity;
+ for(const r of closed.data||[])limits[r.production_date]=0;
+ return {capacity,limits};
 }

@@ -2,7 +2,7 @@ import {protect,reveal} from '@/lib/server/privacy';
 import {object,period,text} from '@/lib/server/input';
 import {ApiError,operationError} from '@/lib/server/errors';
 import { NextRequest,NextResponse } from 'next/server';
-import { availability,body,customer,failure } from '@/lib/server/database';
+import { productionAvailability,body,customer,failure } from '@/lib/server/database';
 import { INITIAL_INGREDIENTS } from '@/lib/supabase/mock-data';
 import { calculateVolumePrice } from '@/lib/rules';
 import { validatePlan,DeliveryPlan } from '@/lib/scheduling';
@@ -30,7 +30,7 @@ export async function POST(req:NextRequest) {
       return {tempId:i.tempId,type:i.type,name:protein.name+' com '+base.name,base,protein,side1,side2,quantity:i.quantity,specialInstructions};
     });
     const deliveries:DeliveryPlan[]=input.deliveries.map((raw:unknown)=>{const p=object(raw);return {id:crypto.randomUUID(),date:text(p.date,10,true),quantities:object(p.quantities),period:period(p.period) as DeliveryPlan['period']};});
-    const error=validatePlan(items,deliveries,await availability());if(error)throw new ApiError(error);
+    const available=await productionAvailability();const error=validatePlan(items,deliveries,available.capacity,false,undefined,available.limits);if(error)throw new ApiError(error);
     const quantity=items.reduce((n,i)=>n+i.quantity,0);if(quantity>10000)throw new ApiError('Máximo de 10.000 unidades por pedido.');
     if(typeof input.requestId!=='string'||! /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.requestId))throw new ApiError('Identificador inválido.');
     const id=input.requestId;

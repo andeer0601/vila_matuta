@@ -30,6 +30,7 @@ test.before(async()=>{
  await db.exec(fs.readFileSync('supabase/migrations/20260927_production_and_security.sql','utf8'));
  await db.exec(fs.readFileSync('supabase/migrations/20261008_operations.sql','utf8'));
  await db.exec(fs.readFileSync('supabase/migrations/20261009_security.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/20261031_daily_capacity.sql','utf8'));
  await db.exec("insert into allowed_emails(email,role) values ('customer@test.local','customer'),('other@test.local','customer'),('admin@test.local','admin');");
  for(const [id,email] of [[owner,'customer@test.local'],[other,'other@test.local'],[admin,'admin@test.local']])await db.query('insert into auth.users(id,email) values($1,$2)',[id,email]);
 });
@@ -149,4 +150,40 @@ test('encrypted addresses survive production snapshots and transactional primary
  const load=require('./helpers/load-ts.cjs');process.env.DATA_ENCRYPTION_KEYS=JSON.stringify({v1:Buffer.alloc(32,7).toString('base64')});process.env.DATA_ENCRYPTION_ACTIVE_KEY='v1';const {protect,reveal}=load('src/lib/server/privacy.ts');
  const a=address('Endereço sigiloso');await saveAddress(owner,protect(a,owner),true);const original=plan(2,future(20));const prepared=(await db.query('select prepare_plans($1,$2) plans',[owner,JSON.stringify([original])])).rows[0].plans;assert.ok(prepared[0].address.street.startsWith('vmenc:1:'));assert.equal(reveal(prepared,owner)[0].address.street,a.street);
  const id=await purchase(2,prepared);await confirm(id,2);await saveAddress(owner,protect(address('Outro endereço sigiloso'),owner),true);const payload=(await get(id)).payload;assert.ok(!JSON.stringify(payload).includes('Outro endereço sigiloso'));assert.equal(reveal(payload,owner).deliveries[0].address.street,'Outro endereço sigiloso');
+});
+
+test('daily capacity changes are admin-only and isolated by date',async()=>{
+ const d=future(30);await assert.rejects(db.query('select set_production_capacity($1,$2,180)',[owner,d]),/Acesso negado/);
+ await db.query('select set_production_capacity($1,$2,180)',[admin,d]);
+ const id=await purchase(150,[plan(150,d)]);await confirm(id,150);assert.equal((await get(id)).needs_rescheduling,false);
+ await assert.rejects(db.query('select set_production_capacity($1,$2,149)',[admin,d]),/comprometidas/);
+ await assert.rejects(db.query('select set_production_capacity($1,$2,null)',[admin,d]),/comprometidas/);
+ await db.query('select set_production_capacity($1,$2,150)',[admin,d]);
+ const excess=await purchase(2,[plan(2,d)]);await assert.rejects(db.query('select reserve_checkout($1,$2)',[excess,owner]),/Production full/);
+ assert.equal((await db.query('select count(*)::int n from production_limits where production_date=$1',[future(31)])).rows[0].n,0);
+ for(const role of ['anon','authenticated']){await db.exec('begin; set local role '+role);await assert.rejects(db.query('select set_production_capacity($1,$2,200)',[admin,d]));await db.exec('rollback');}
+});
+test('active holds protect reductions, expired holds and cancelled orders release daily capacity',async()=>{
+ const d=future(32);const id=await purchase(30,[plan(30,d)]);await db.query('select reserve_checkout($1,$2)',[id,owner]);
+ await assert.rejects(db.query('select set_production_capacity($1,$2,20)',[admin,d]),/comprometidas/);
+ await db.query("update production_reservations set expires_at=now()-interval '1 second' where purchase_id=$1",[id]);
+ await db.query('select set_production_capacity($1,$2,20)',[admin,d]);
+ await confirm(id,30);assert.equal((await get(id)).needs_rescheduling,true);
+ const paid=await purchase(20,[plan(20,d)]);await confirm(paid,20);
+ await db.query("update meal_purchases set status='cancelled' where id=$1",[paid]);await db.query('select set_production_capacity($1,$2,2)',[admin,d]);
+ assert.equal((await db.query('select count(*)::int n from production_capacity where delivery_date=$1',[d])).rows[0].n,0);
+});
+test('capacity override and reset validate dates, limits and closed days',async()=>{
+ const d=future(33);for(const limit of [0,1,10001])await assert.rejects(db.query('select set_production_capacity($1,$2,$3)',[admin,d,limit]));
+ await assert.rejects(db.query("select set_production_capacity($1,'2020-01-01',120)",[admin]),/Data/);
+ await db.query('select set_production_capacity($1,$2,60)',[admin,d]);await db.query('select set_production_closure($1,$2,true,\'\')',[admin,d]);await assert.rejects(db.query('select set_production_capacity($1,$2,80)',[admin,d]),/Reabra/);
+ await db.query('select set_production_closure($1,$2,false,\'\')',[admin,d]);assert.equal((await db.query('select capacity from production_limits where production_date=$1',[d])).rows[0].capacity,60);
+ await db.query('select set_production_capacity($1,$2,null)',[admin,d]);assert.equal((await db.query('select count(*)::int n from production_limits where production_date=$1',[d])).rows[0].n,0);
+});
+test('queued capacity changes and reservations cannot oversell the final limit',async()=>{
+ const d=future(34),id=await purchase(80,[plan(80,d)]);
+ const results=await Promise.allSettled([db.query('select set_production_capacity($1,$2,60)',[admin,d]),db.query('select reserve_checkout($1,$2)',[id,owner])]);
+ assert.equal(results.filter(r=>r.status==='rejected').length,1);
+ const used=(await db.query('select coalesce(sum(quantity),0)::int n from production_reservations where delivery_date=$1 and (expires_at is null or expires_at>now())',[d])).rows[0].n;
+ const limit=(await db.query('select coalesce((select capacity from production_limits where production_date=$1),120) n',[d])).rows[0].n;assert.ok(used<=limit);
 });

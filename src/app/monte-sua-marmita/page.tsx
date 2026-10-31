@@ -15,7 +15,7 @@ import { DEMO_MODE } from '@/lib/mode';
 
 export default function Builder(){
  const router=useRouter();const {user}=useAuth();
- const {draft,draftReady,draftConflict,resolveDraft,patchDraft,items,addItem,editItem,removeItem,updateItemQuantity,createOrder,capacity,totalMealsCount,pricing,isLoading,loadError,refresh}=useCart();
+ const {draft,draftReady,draftConflict,resolveDraft,patchDraft,items,addItem,editItem,removeItem,updateItemQuantity,createOrder,capacity,capacityLimits,totalMealsCount,pricing,isLoading,loadError,refresh}=useCart();
  const {editor,plans,mode,step}=draft;const {type:tab,base,protein,sides,dish,quantity,notes,id:editingItem}=editor;
  const [group,setGroup]=useState<'base'|'protein'|'side'>('base');const [error,setError]=useState('');const [notice,setNotice]=useState('');const [busy,setBusy]=useState(false);const [editingAddress,setEditingAddress]=useState(false);
  const heading=useRef<HTMLHeadingElement>(null);const lastStep=useRef<number|undefined>(undefined);
@@ -23,7 +23,7 @@ export default function Builder(){
  useEffect(()=>{if(!draftReady)return;if(lastStep.current!==undefined&&lastStep.current!==step){heading.current?.focus({preventScroll:true});heading.current?.scrollIntoView({block:'start',behavior:'auto'});}lastStep.current=step;},[step,draftReady]);
  const go=(next:1|2|3)=>{setError('');setNotice('');patchDraft({step:next});};
  const valid=tab==='complete_dish'?!!dish:!!base&&!!protein&&sides.length===2;
- const planError=items.length?validatePlan(items,plans,capacity,mode==='single'):'Adicione pelo menos um sabor.';
+ const planError=items.length?validatePlan(items,plans,capacity,mode==='single',undefined,capacityLimits):'Adicione pelo menos um sabor.';
  const remaining=items.reduce((n,i)=>n+i.quantity-allocated(plans,i.tempId),0);
  function saveMeal(){
   if(!valid||!Number.isInteger(quantity)||quantity<2){setError('Escolha o sabor e pelo menos 2 unidades.');return;}
@@ -54,7 +54,7 @@ export default function Builder(){
     {editingItem&&<button className="underline text-sm" onClick={()=>patchDraft({editor:emptyEditor()})}>Cancelar edição</button>}
     {notice&&<p role="status" className="text-sm font-semibold text-[#71421E] flex items-start gap-2"><CheckCircle2 size={18} className="shrink-0"/>{notice}</p>}
    </section>}
-   {step===2&&<section className="rustic-card p-5 sm:p-7"><DeliveryPlanner items={items} capacity={capacity} plans={plans} onChange={plans=>patchDraft({plans})} mode={mode} onModeChange={mode=>patchDraft({mode})}/></section>}
+   {step===2&&<section className="rustic-card p-5 sm:p-7"><DeliveryPlanner items={items} capacity={capacity} limits={capacityLimits} plans={plans} onChange={plans=>patchDraft({plans})} mode={mode} onModeChange={mode=>patchDraft({mode})}/></section>}
    {step===3&&<>
     <section className="rustic-card p-5 sm:p-7 space-y-4"><div className="flex justify-between gap-3 items-center"><h2 className="text-xl font-bold">Seus sabores</h2><button className="underline text-sm min-h-11" onClick={()=>go(1)}>Editar sabores</button></div>{items.map(i=><div key={i.tempId} className="border-t border-stone-100 pt-3"><strong>{i.quantity} × {i.name}</strong><p className="text-sm text-stone-600">{[i.side1?.name,i.side2?.name].filter(Boolean).join(' + ')}</p>{i.specialInstructions&&<p className="text-sm mt-1">{i.specialInstructions}</p>}</div>)}</section>
     <section className="rustic-card p-5 sm:p-7 space-y-4"><div className="flex justify-between items-center gap-3"><h2 className="text-xl font-bold">Suas entregas</h2><button className="underline text-sm min-h-11" onClick={()=>go(2)}>Editar entregas</button></div>{plans.map((p,index)=><div key={p.id} className="rounded-xl bg-[#FAF3E7] p-4 space-y-1"><strong className="block">{deliveryWindow(p.date)}</strong><p className="text-sm text-stone-600">Produção {shortDate(p.date)} · {p.period||user?.preferred_delivery_period||'Sem preferência de período'}</p>{items.filter(i=>p.quantities[i.tempId]).map(i=><p key={i.tempId} className="text-sm">{p.quantities[i.tempId]} × {i.name}</p>)}</div>)}{remaining>0&&<p className="text-sm font-semibold">{remaining} marmitas para agendar depois.</p>}</section>

@@ -4,11 +4,13 @@ import { DEMO_MODE } from './mode';
 
 import { Order, Profile, ShippingAddressSnapshot } from '@/types/database';
 
-import { capacityFromOrders, DeliveryPlan, isProductionDate, todayInSaoPaulo,validatePlan } from './scheduling';
+import { validateCapacityChange, capacityFromOrders, CapacityLimits, DeliveryPlan, isProductionDate, todayInSaoPaulo,validatePlan } from './scheduling';
 
 export type SavedAddress={id:string;user_id:string;address:ShippingAddressSnapshot};
 
-export type ShopSettings={whatsapp:string;closures:{production_date:string;reason:string}[]};
+export type ShopSettings={whatsapp:string;capacity_limits?:CapacityLimits;closures:{production_date:string;reason:string}[]};
+
+export const settingsLimits=(settings:ShopSettings):CapacityLimits=>({...settings.capacity_limits,...Object.fromEntries(settings.closures.map(d=>[d.production_date,0]))});
 
 export const ORDER_STORAGE='vm_demo_orders_v2';
 
@@ -30,9 +32,10 @@ export async function operate(user:Profile,input:Record<string,unknown>){if(!DEM
 
  if(input.action==='whatsapp'){const phone=String(input.whatsapp||'').replace(/\D/g,'');if(phone&&!/^[0-9]{10,15}$/.test(phone))throw new Error('Informe DDI, DDD e telefone.');settings.whatsapp=phone;writeLocal('vm_settings',settings);}
 
+ else if(input.action==='capacity'){const date=String(input.date);const limit=input.limit===null?120:input.limit;const error=validateCapacityChange(date,limit,capacityFromOrders(orders)[date]||0);if(error)throw new Error(error);if(settings.closures.some(d=>d.production_date===date))throw new Error('Reabra a produção antes de alterar a capacidade.');settings.capacity_limits={...settings.capacity_limits};if(input.limit===null)delete settings.capacity_limits[date];else settings.capacity_limits[date]=limit as number;writeLocal('vm_settings',settings);}
  else if(input.action==='closure'){const date=String(input.date);if(!isProductionDate(date))throw new Error('Data inválida.');if(input.closed&&(capacityFromOrders(orders)[date]||0)>0)throw new Error('Esta produção tem pedidos ou reservas. Resolva os pedidos antes de bloquear a data.');settings.closures=settings.closures.filter(d=>d.production_date!==date);if(input.closed)settings.closures.push({production_date:date,reason:String(input.reason||'')});writeLocal('vm_settings',settings);}
 
- else if(input.action==='move'){const order=orders.find(o=>o.id===input.orderId);const plan=order?.deliveries?.find(p=>p.id===input.planId);if(!order||!plan||['pending','cancelled'].includes(order.status)||(plan.status||'scheduled')!=='scheduled')throw new Error('Produção indisponível para remarcação.');const updated={...plan,date:String(input.date)};const otherOrders=orders.map(o=>o.id===order.id?{...o,deliveries:o.deliveries?.filter(p=>p.id!==plan.id)}:o);const items=(order.items||[]).map(i=>({tempId:i.id,quantity:i.quantity}));const cap={...capacityFromOrders(otherOrders),...Object.fromEntries(settings.closures.map(d=>[d.production_date,120]))};const error=validatePlan(items,[updated],cap);if(error)throw new Error(error);if(order.deliveries?.some(p=>p.id!==plan.id&&p.date===updated.date))throw new Error('Já existe produção neste dia para o pedido.');plan.date=updated.date;if(plan.address_mode!=='specific'){const current=readLocal<Record<string,Profile>>('vm_profiles',{})[order.user_id]||order.profile;if(current)plan.address=profileAddress(current);}order.delivery_date=order.deliveries!.map(p=>p.date).sort()[0];writeLocal(ORDER_STORAGE,orders);}
+ else if(input.action==='move'){const order=orders.find(o=>o.id===input.orderId);const plan=order?.deliveries?.find(p=>p.id===input.planId);if(!order||!plan||['pending','cancelled'].includes(order.status)||(plan.status||'scheduled')!=='scheduled')throw new Error('Produção indisponível para remarcação.');const updated={...plan,date:String(input.date)};const otherOrders=orders.map(o=>o.id===order.id?{...o,deliveries:o.deliveries?.filter(p=>p.id!==plan.id)}:o);const items=(order.items||[]).map(i=>({tempId:i.id,quantity:i.quantity}));const cap=capacityFromOrders(otherOrders);const error=validatePlan(items,[updated],cap,false,undefined,settingsLimits(settings));if(error)throw new Error(error);if(order.deliveries?.some(p=>p.id!==plan.id&&p.date===updated.date))throw new Error('Já existe produção neste dia para o pedido.');plan.date=updated.date;if(plan.address_mode!=='specific'){const current=readLocal<Record<string,Profile>>('vm_profiles',{})[order.user_id]||order.profile;if(current)plan.address=profileAddress(current);}order.delivery_date=order.deliveries!.map(p=>p.date).sort()[0];writeLocal(ORDER_STORAGE,orders);}
  else if(input.action==='status'){const order=orders.find(o=>o.id===input.orderId);const plan=order?.deliveries?.find(p=>p.id===input.planId);if(!order||!plan||['pending','cancelled'].includes(order.status))throw new Error('Pedido não pago.');const next:Record<string,string>={scheduled:'preparing',preparing:'ready',ready:'in_delivery',in_delivery:'delivered'};if(next[plan.status||'scheduled']!==input.status)throw new Error('Transição inválida.');plan.status=input.status as DeliveryPlan['status'];plan.status_updated_at=new Date().toISOString();writeLocal(ORDER_STORAGE,orders);}
 
  });}

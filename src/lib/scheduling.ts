@@ -2,6 +2,14 @@ import type { CustomMealSelection, Order, ShiftName, ShippingAddressSnapshot } f
 export const DAILY_CAPACITY = 120;
 export type DeliveryPlan = { id: string; date: string; quantities: Record<string, number>; period?: ShiftName | null; preferred_period?: ShiftName | null; address?: ShippingAddressSnapshot; address_mode?: 'primary' | 'specific'; address_id?: string; status?: 'scheduled' | 'preparing' | 'ready' | 'in_delivery' | 'delivered'; status_updated_at?: string };
 export type Capacity = Record<string, number>;
+export type CapacityLimits = Record<string, number>;
+export const productionLimit = (date: string, limits: CapacityLimits = {}) => limits[date] ?? DAILY_CAPACITY;
+export function validateCapacityChange(date:string, limit:unknown, committed:number, today=todayInSaoPaulo()) {
+  if(!isProductionDate(date,today)) return 'Data inválida';
+  if(typeof limit!=='number'||!Number.isInteger(limit)||limit<2||limit>10000) return 'Informe uma capacidade inteira entre 2 e 10.000.';
+  if(limit<committed) return 'A capacidade não pode ser menor que as vagas comprometidas.';
+  return null;
+}
 export function todayInSaoPaulo(now = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
 }
@@ -13,16 +21,16 @@ export function isProductionDate(date: string, today = todayInSaoPaulo()) {
   const d = new Date(`${date}T12:00:00Z`);
   return /^\d{4}-\d{2}-\d{2}$/.test(date) && !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === date && date > today && [1, 3, 5].includes(d.getUTCDay());
 }
-export function nextAvailableDate(from = addDateDays(todayInSaoPaulo(), 1), capacity: Capacity = {}, quantity = 2): string {
+export function nextAvailableDate(from = addDateDays(todayInSaoPaulo(), 1), capacity: Capacity = {}, quantity = 2, limits: CapacityLimits = {}): string {
   for (let i = 0; i < 730; i++) {
     const date = addDateDays(from, i);
-    if (isProductionDate(date) && DAILY_CAPACITY - (capacity[date] || 0) >= quantity) return date;
+    if (isProductionDate(date) && productionLimit(date, limits) - (capacity[date] || 0) >= quantity) return date;
   }
   return '';
 }
 export function planCount(plan: DeliveryPlan) { return Object.values(plan.quantities).reduce((a, b) => a + b, 0); }
 export function allocated(plans: DeliveryPlan[], id: string) { return plans.reduce((a, p) => a + (p.quantities[id] || 0), 0); }
-export function validatePlan(items: Pick<CustomMealSelection, 'tempId' | 'quantity'>[], plans: DeliveryPlan[], capacity: Capacity = {}, requireAll = false, today = todayInSaoPaulo()) {
+export function validatePlan(items: Pick<CustomMealSelection, 'tempId' | 'quantity'>[], plans: DeliveryPlan[], capacity: Capacity = {}, requireAll = false, today = todayInSaoPaulo(), limits: CapacityLimits = {}) {
   if (!items.length || items.some(i => !Number.isInteger(i.quantity) || i.quantity < 2 || i.quantity > 10000)) return 'Cada combinação precisa ter pelo menos 2 unidades.';
   if (!plans.length || plans.length > 200) return 'Adicione pelo menos uma entrega (máximo de 200).';
   const dates = new Set<string>();
@@ -34,7 +42,7 @@ export function validatePlan(items: Pick<CustomMealSelection, 'tempId' | 'quanti
     for (const [id, qty] of Object.entries(plan.quantities)) {
       if (!items.some(i => i.tempId === id) || !Number.isInteger(qty) || (qty !== 0 && qty < 2)) return 'Selecione no mínimo 2 unidades de cada sabor por entrega.';
     }
-    if (planCount(plan) + (capacity[plan.date] || 0) > DAILY_CAPACITY) return `A produção de ${plan.date.split('-').reverse().join('/')} não comporta essa quantidade. Escolha outra data.`;
+    if (planCount(plan) + (capacity[plan.date] || 0) > productionLimit(plan.date, limits)) return `A produção de ${plan.date.split('-').reverse().join('/')} não comporta essa quantidade. Escolha outra data.`;
   }
   for (const item of items) {
     const remaining = item.quantity - allocated(plans, item.tempId);

@@ -9,12 +9,12 @@ import {deliveryStatusLabels} from '@/lib/scheduling';
 import { Order,CustomMealSelection } from '@/types/database';
 import { DeliveryPlanner } from '@/components/DeliveryPlanner';
 function Schedule({order,onClose}:{order:Order;onClose:()=>void}) {
- const {capacity,scheduleBalance}=useCart();const [plans,setPlans]=useState<DeliveryPlan[]>(order.status==='pending'?order.deliveries||[]:[]);const [mode,setMode]=useState<'single'|'scheduled'>('scheduled');const [error,setError]=useState('');const [busy,setBusy]=useState(false);
+ const {capacity,capacityLimits,scheduleBalance}=useCart();const [plans,setPlans]=useState<DeliveryPlan[]>(order.status==='pending'?order.deliveries||[]:[]);const [mode,setMode]=useState<'single'|'scheduled'>('scheduled');const [error,setError]=useState('');const [busy,setBusy]=useState(false);
  const pending=order.status==='pending';
  const items:CustomMealSelection[]=(order.items||[]).map(i=>({tempId:i.id,type:i.item_type,name:i.name,base:i.base,protein:i.protein,side1:i.side1,side2:i.side2,completeDish:i.complete_dish,quantity:i.quantity-(pending?0:allocated(order.deliveries||[],i.id))})).filter(i=>i.quantity>0);
- const validation=validatePlan(items,plans,capacity,mode==='single');
+ const validation=validatePlan(items,plans,capacity,mode==='single',undefined,capacityLimits);
  async function save(){setBusy(true);try{await scheduleBalance(order.id,plans);onClose();}catch(e){setError(e instanceof Error?e.message:'Erro ao agendar.');}finally{setBusy(false);}}
- return <div className="mt-5 border-t pt-5 space-y-4"><h3 className="font-bold text-xl">{pending?'Revisar planejamento':'Agendar meu saldo'}</h3><DeliveryPlanner paid={!pending} reservedDates={pending ? [] : (order.deliveries||[]).map(d=>d.date)} items={items} capacity={capacity} plans={plans} onChange={setPlans} mode={mode} onModeChange={setMode}/>{(error||validation)&&<p role="status" className="notice">{error||validation}</p>}<div className="flex gap-3"><button className="button-primary" disabled={busy||!!validation} onClick={save}>{busy?'Salvando…':'Salvar entregas'}</button><button className="button-secondary" onClick={onClose}>Voltar</button></div></div>;
+ return <div className="mt-5 border-t pt-5 space-y-4"><h3 className="font-bold text-xl">{pending?'Revisar planejamento':'Agendar meu saldo'}</h3><DeliveryPlanner paid={!pending} reservedDates={pending ? [] : (order.deliveries||[]).map(d=>d.date)} items={items} capacity={capacity} limits={capacityLimits} plans={plans} onChange={setPlans} mode={mode} onModeChange={setMode}/>{(error||validation)&&<p role="status" className="notice">{error||validation}</p>}<div className="flex gap-3"><button className="button-primary" disabled={busy||!!validation} onClick={save}>{busy?'Salvando…':'Salvar entregas'}</button><button className="button-secondary" onClick={onClose}>Voltar</button></div></div>;
 }
 export default function MyOrders() {
  const {orders,creditsBalance,isLoading,loadError,refresh}=useCart();const [addressEditing,setAddressEditing]=useState('');const {user}=useAuth();const [editing,setEditing]=useState('');
