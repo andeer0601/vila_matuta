@@ -7,7 +7,7 @@ import type {SupabaseClient} from '@supabase/supabase-js';
 async function matchingAddress(db:SupabaseClient,owner:string,a:Record<string,string>){const {data,error}=await db.from('saved_addresses').select('id,address').eq('user_id',owner);if(error)throw new ApiError('Não foi possível consultar endereços.',503);return data?.find(row=>{const plain=reveal(row.address,owner);return Object.keys(a).every(k=>(plain[k]||'')===a[k]);})?.id||null;}
 export async function GET(req:NextRequest){try{const {db,user,profile}=await customer(req);const {data,error}=await db.from('saved_addresses').select('*').eq('user_id',user.id).order('created_at');if(error)throw new ApiError('Não foi possível carregar endereços.');return NextResponse.json({profile,addresses:data.map(row=>({...row,address:reveal(row.address,user.id)}))},{headers:{'Cache-Control':'no-store'}});}catch(e){return failure(e);}}
 export async function POST(req:NextRequest){try{
- const input=await body(req);const {db,user,profile}=await customer(req);
+ const input=await body(req);const {db,user,profile}=await customer(req);if(profile.role!=='customer')throw new ApiError('Perfil de compra exclusivo de clientes.',403);
  if(input.action==='address'){
  const a=input.address?address(input.address):null;
  const existing=input.addressId?uuid(input.addressId):a?await matchingAddress(db,user.id,a):null;

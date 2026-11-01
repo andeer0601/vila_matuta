@@ -1,10 +1,10 @@
 'use client';
 
 import { DEMO_MODE } from '@/lib/mode';
-import React, { useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Utensils, Calendar, ShoppingBag, ShieldCheck, User, Sparkles, ChevronDown, CheckCircle2 } from 'lucide-react';
+import { Utensils, Calendar, ShoppingBag, User, Sparkles } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 
@@ -17,12 +17,12 @@ export function Navbar() {
   return (
     <header className="sm:sticky top-0 z-50 bg-[#FDFBF7]/95 backdrop-blur border-b border-[#EDE0D4] shadow-sm">
       {DEMO_MODE && <div className="bg-[#5C4033] text-white text-xs py-2 px-4"><div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2"><span><strong>Demonstração</strong> · Dados fictícios · Sem cobranças reais</span><Link className="underline font-semibold py-1" href="/entrar">{user ? 'Trocar perfil' : 'Escolher perfil de teste'}</Link></div></div>}
-      <div className="max-w-7xl mx-auto px-5 flex flex-wrap justify-end items-center gap-4 py-2 text-sm">{user ? <><span>{user.full_name} · {role==='admin'?'Administrador':'Cliente'}</span><Link href="/enderecos" className="underline">Meus endereços</Link><button onClick={()=>{logout();router.push('/entrar');}} className="underline">Sair</button></> : <Link href="/entrar" className="underline font-semibold">Entrar</Link>}</div>
+      <div className="max-w-7xl mx-auto px-5 flex flex-wrap justify-end items-center gap-4 py-2 text-sm">{user ? <><span>{user.full_name} · {role==='admin'?'Administrador':'Cliente'}</span>{role!=='admin'&&<Link href="/enderecos" className="underline">Meus endereços</Link>}<button onClick={()=>{logout();router.push('/entrar');}} className="underline">Sair</button></> : <Link href="/entrar" className="underline font-semibold">Entrar</Link>}</div>
       {/* Main Nav Bar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-3 group">
+          <Link href={role==='admin'?'/admin':'/'} className="flex items-center gap-3 group">
             <div className="hidden sm:flex w-12 h-12 rounded-2xl bg-[#B94B0B] flex items-center justify-center text-white shadow-md group-hover:scale-105 transition-transform">
               <Utensils className="w-6 h-6" />
             </div>
@@ -37,6 +37,7 @@ export function Navbar() {
           </Link>
 
           {/* Navigation Links */}
+          {role==='admin'?<nav aria-label="Navegação administrativa" className="hidden lg:flex items-center gap-2">{[['/admin','Produção'],['/admin/pedidos','Pedidos'],['/admin/usuarios','Usuários'],['/admin/slots','Configurações']].map(([href,label])=><Link key={href} href={href} aria-current={pathname===href?'page':undefined} className={`px-4 py-3 rounded-xl font-semibold text-sm ${pathname===href?'bg-[#5C4033] text-white':'hover:bg-[#F5F0EB]'}`}>{label}</Link>)}</nav>:<>
           <nav aria-label="Navegação principal" className="hidden lg:flex items-center gap-1 lg:gap-2">
             <Link
               href="/monte-sua-marmita"
@@ -62,22 +63,12 @@ export function Navbar() {
               Pedidos & Entregas
             </Link>
 
-            {role === 'admin' && (
-              <Link
-                href="/admin"
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition flex items-center gap-2 ${
-                  pathname.startsWith('/admin')
-                    ? 'bg-[#5C4033] text-[#F5F0EB] shadow-sm'
-                    : 'text-[#B94B0B] bg-[#FFF7ED] hover:bg-[#FFEDD5] border border-[#FED7AA]'
-                }`}
-              >
-                <ShieldCheck className="w-4 h-4" />
-                Administração
-              </Link>
-            )}
+
           </nav>
 
+          </>}
           {/* Right Action Icons & Badges */}
+          {role!=='admin'&&(
           <div className="flex items-center gap-3">
             {/* Saldo de Créditos Badge */}
             <div className="hidden sm:flex flex-col items-end">
@@ -103,16 +94,16 @@ export function Navbar() {
 
             {/* Onboarding / Profile shortcut */}
             <Link
-              href={user ? "/onboarding" : "/entrar"}
+              href={user ? "/minha-conta" : "/entrar"}
               className="p-2.5 rounded-xl bg-[#F5F0EB] hover:bg-[#EDE0D4] text-[#5C4033] transition flex items-center justify-center"
-              aria-label="Meu perfil e restrições"
+              aria-label="Minha conta"
             >
               <User className="w-5 h-5" />
             </Link>
-          </div>
+          </div>)}
         </div>
       </div>
-      <nav aria-label="Navegação móvel" className="lg:hidden flex justify-center gap-5 border-t py-3 text-sm font-semibold"><Link href="/monte-sua-marmita">Montar pedido</Link><Link href="/meus-pedidos">Minhas entregas</Link>{role === 'admin' && <Link href="/admin">Cozinha</Link>}</nav>
+      <nav aria-label="Navegação móvel" className="lg:hidden flex flex-wrap justify-center gap-x-4 gap-y-1 border-t px-3 py-2 text-sm font-semibold">{(role==='admin'?[['/admin','Produção'],['/admin/pedidos','Pedidos'],['/admin/usuarios','Usuários'],['/admin/slots','Configurações']]:[['/monte-sua-marmita','Montar pedido'],['/meus-pedidos','Minhas entregas']]).map(([href,label])=><Link className="py-2" aria-current={pathname===href?'page':undefined} key={href} href={href}>{label}</Link>)}</nav>
     </header>
   );
 }

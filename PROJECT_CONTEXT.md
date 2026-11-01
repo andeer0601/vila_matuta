@@ -1,3 +1,29 @@
+## Atualização 01/11/2026 - consolidação para envio
+
+- Usuário autorizou commit e push das mudanças de calendário, acesso, fichas e pedidos. As notas abaixo de pendência registram o estado histórico de implementação.
+- 75 testes aprovados, TypeScript e build demo validados. Navegação visual em 320/390 px sem overflow nas fichas e detalhes; APIs demo bloqueadas em 55 verificações HTTP.
+- Migrações externas e pagamentos reais continuam não executados; requisitos e limitações abaixo permanecem.
+
+## Atualização 31/10/2026 — fichas e recuperação de pagamento (pendente)
+
+- Novas páginas: /admin/usuarios/[id], /admin/pedidos/[id], /minha-conta, /meus-pedidos/[id]. Ficha reúne dados atuais, endereços, restrições e histórico de todos os status paginado de 25 em 25. Detalhes do pedido preservam snapshots, criação, confirmação de pagamento, itens e entregas por data. Finalizado é derivado de todas as unidades entregues; pagamento e produção são estados distintos.
+- GET /api/users/[id] permite admin ou titular (me); GET /api/orders/[id] confere propriedade para clientes. Consultas por ID alheio não retornam dados. Listas/fichas não retornam URL de cobrança, Pix nem referências de transação. Mudanças de usuário invalidam respostas pendentes no cliente.
+- Checkout só gera ou recupera link mediante ação explícita. POST exige action=create ou retrieve; retrieve nunca chama a criação do gateway. Links seguros existentes são reutilizados; expirados, legados sem garantias ou criação com resultado incerto exigem atendimento, sem nova cobrança automática. Na demo, copiar fornece apenas a URL interna do checkout local, e pagamento continua exclusivamente simulado.
+- Documentação oficial consultada em 31/10/2026: https://www.infinitepay.io/checkout-documentacao — links sem valid_until não expiram, padrão permite múltiplos pagamentos, não há cancelamento de link nem consulta só por order_nsu. Novos links agora exigem INFINITEPAY_API_KEY somente servidor e options.single_payment=true / valid_until igual à reserva. Demo recusa também essa credencial no preflight.
+- Aplicar 20261102_payment_link_safety.sql após as migrações anteriores; campos checkout_expires_at e checkout_single_payment. Nenhuma migração externa ou gateway real foi executado. É obrigatório homologar credencial, opções, webhook, reconciliação e expiração no provedor antes de habilitar pagamentos reais. Link expirado não é renovado automaticamente; conferir pagamentos pendentes com a equipe. Bloqueio de acesso continua no app, não revoga JWT no provedor.
+- Sem commit/push/deploy. Dados mockados existentes preservados.
+
+## Atualização 31/10/2026 — administração e acesso (pendente, sem publicação)
+
+- Administração separada da compra: navegação Produção/Pedidos/Usuários/Configurações; sem carrinho, saldo, perfil alimentar ou endereços do administrador. URLs de compra redirecionam admin; APIs e criação no banco recusam compras administrativas.
+- /admin/pedidos permite buscar por cliente/ID, filtrar status, expandir detalhes e operar entregas individualmente. Produção por data preservada com calendário/setas pendentes.
+- /admin/usuarios lista nome/ID/papel/status; desativa/reativa clientes e outros administradores com confirmação. Apenas a própria conta é protegida; a autorização do administrador é revalidada dentro do lock, impedindo que dois administradores se desativem mutuamente. Não há exclusão, cancelamento automático nem perda de histórico.
+- Nova migração 20261101_user_access.sql após 20261031_daily_capacity.sql: profiles.disabled_at, user_access_events (auditoria), RPC set_user_access somente service_role; lock 72841921 compartilhado com compra/reservas. Criação, reserva e agendamento revalidam cliente ativo no banco. RPCs de capacidade, bloqueio, etapas, remarcação e contato também revalidam administrador ativo dentro do lock; contato passa por set_shop_contact.
+- Login da aplicação recusa perfil desativado; toda API autenticada revalida disabled_at mesmo com JWT válido. UI revalida ao focar e a cada 30 segundos. Isso não invalida o JWT no provedor nem impede emissão de token diretamente pelo Supabase Auth: esse token continua sem acesso às APIs do app; as tabelas operacionais permanecem sem grants para authenticated. Para bloquear também autenticação direta no provedor, homologar ban/hook do Supabase antes de uso real.
+- Demo usa perfis locais com Web Lock, sincronização entre abas e recusa de login. É simulação reversível pelo armazenamento/reset, não controle de segurança real. Dados desativados continuam no mesmo navegador.
+- Não foram aplicadas migrações externas, acessados dados reais ou feitos commit/push/deploy nesta etapa. Capacidade está no commit local a3f2347; calendário e administração continuam pendentes.
+- Limite atual de escala: listagem real usa limite padrão do Supabase; paginação de grandes bases ainda é necessária. Não há alteração de papéis nem cadastro de contas nesta tela.
+
 ## Atualização 31/10/2026 — capacidade por data (implementada; sem publicação)
 
 - 120 unidades é o padrão. O Administrador pode ajustar uma produção futura específica entre 2 e 10.000, sem mudar outros dias; bloqueio total continua em “Marcar sem produção”.

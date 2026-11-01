@@ -1,19 +1,20 @@
+import {orderView} from '@/lib/server/order-view';
 import {protect,reveal} from '@/lib/server/privacy';
 import {object,period,text} from '@/lib/server/input';
 import {ApiError,operationError} from '@/lib/server/errors';
 import { NextRequest,NextResponse } from 'next/server';
-import { productionAvailability,body,customer,failure } from '@/lib/server/database';
+import { productionAvailability,body,customer,purchasingCustomer,failure } from '@/lib/server/database';
 import { INITIAL_INGREDIENTS } from '@/lib/supabase/mock-data';
 import { calculateVolumePrice } from '@/lib/rules';
 import { validatePlan,DeliveryPlan } from '@/lib/scheduling';
 import { CustomMealSelection,Ingredient,Order } from '@/types/database';
 export const dynamic='force-dynamic';
 export async function GET(req:NextRequest) {
-  try{const {db,user,profile}=await customer(req);let query=db.from('meal_purchases').select('*').order('created_at',{ascending:false});if(profile.role!=='admin')query=query.eq('user_id',user.id);const {data,error}=await query;if(error)throw new ApiError('Não foi possível carregar os pedidos.');const {data:holds,error:holdsError}=await db.from('production_reservations').select('purchase_id,expires_at').in('purchase_id',data.map(r=>r.id));if(holdsError)throw new ApiError('Não foi possível carregar as reservas.');return NextResponse.json({orders:data.map(r=>({...reveal(r.payload,r.user_id),status:r.status,paid_at:r.paid_at,needs_rescheduling:r.needs_rescheduling,infinitepay_checkout_url:r.checkout_url,checkout_needs_attention:!!r.checkout_claimed_at&&!r.checkout_url&&r.status==='pending',reservation_expires_at:holds?.find(h=>h.purchase_id===r.id)?.expires_at}))});}catch(e){return failure(e);}
+  try{const {db,user,profile}=await customer(req);let query=db.from('meal_purchases').select('*').order('created_at',{ascending:false});if(profile.role!=='admin')query=query.eq('user_id',user.id);const {data,error}=await query;if(error)throw new ApiError('Não foi possível carregar os pedidos.');const {data:holds,error:holdsError}=await db.from('production_reservations').select('purchase_id,expires_at').in('purchase_id',data.map(r=>r.id));if(holdsError)throw new ApiError('Não foi possível carregar as reservas.');return NextResponse.json({orders:data.map(r=>({...orderView(r),reservation_expires_at:holds?.find(h=>h.purchase_id===r.id)?.expires_at}))});}catch(e){return failure(e);}
 }
 export async function POST(req:NextRequest) {
   try {
-    const {db,user,profile}=await customer(req);
+    const {db,user,profile}=await purchasingCustomer(req);
     if(!profile.onboarding_completed||!profile.street||!profile.number||!profile.phone)throw new ApiError('Complete seu perfil e endereço antes de pedir.');
     const input=await body(req);
     if(!Array.isArray(input.items)||input.items.length<1||input.items.length>100||!Array.isArray(input.deliveries))throw new ApiError('Pedido inválido.');

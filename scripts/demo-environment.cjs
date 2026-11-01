@@ -5,7 +5,7 @@ function stripDemoPlatformMetadata(env) {
  if(env.NEXT_PUBLIC_DEMO_MODE==='true')delete env.NEXT_PUBLIC_VERCEL_OBSERVABILITY_CLIENT_CONFIG;
 }
 function demoEnvironmentErrors(env) {
- const forbidden=['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SUPABASE_ANON_KEY','SUPABASE_SERVICE_ROLE_KEY','INFINITEPAY_HANDLE','NEXT_PUBLIC_TURNSTILE_SITE_KEY','DATA_ENCRYPTION_KEYS','RATE_LIMIT_SECRET'];
+ const forbidden=['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SUPABASE_ANON_KEY','SUPABASE_SERVICE_ROLE_KEY','INFINITEPAY_HANDLE','INFINITEPAY_API_KEY','NEXT_PUBLIC_TURNSTILE_SITE_KEY','DATA_ENCRYPTION_KEYS','RATE_LIMIT_SECRET'];
  const configured=[...new Set([...forbidden,...Object.keys(env).filter(key=>key.startsWith('NEXT_PUBLIC_')&&key!=='NEXT_PUBLIC_DEMO_MODE')])].filter(key=>!!env[key]);
  const errors=[];
  if(configured.length)errors.push('Demo requires empty service credentials. Configured keys: '+configured.join(', '));

@@ -13,6 +13,7 @@ export interface AllowedEmail {
 }
 
 export interface Profile {
+  disabled_at?: string | null;
   preferred_delivery_period?: ShiftName | null;
   primary_address_id?: string | null;
   id: string;
@@ -87,6 +88,8 @@ export interface ShippingAddressSnapshot {
 }
 
 export interface Order {
+  payment_link_state?: 'none'|'ready'|'expired'|'review';
+  payment_link_expires_at?: string|null;
   checkout_needs_attention?: boolean;
   reservation_expires_at?: string | null;
   deliveries?: import('@/lib/scheduling').DeliveryPlan[];

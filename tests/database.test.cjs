@@ -31,6 +31,8 @@ test.before(async()=>{
  await db.exec(fs.readFileSync('supabase/migrations/20261008_operations.sql','utf8'));
  await db.exec(fs.readFileSync('supabase/migrations/20261009_security.sql','utf8'));
  await db.exec(fs.readFileSync('supabase/migrations/20261031_daily_capacity.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/20261101_user_access.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/20261102_payment_link_safety.sql','utf8'));
  await db.exec("insert into allowed_emails(email,role) values ('customer@test.local','customer'),('other@test.local','customer'),('admin@test.local','admin');");
  for(const [id,email] of [[owner,'customer@test.local'],[other,'other@test.local'],[admin,'admin@test.local']])await db.query('insert into auth.users(id,email) values($1,$2)',[id,email]);
 });
@@ -186,4 +188,42 @@ test('queued capacity changes and reservations cannot oversell the final limit',
  assert.equal(results.filter(r=>r.status==='rejected').length,1);
  const used=(await db.query('select coalesce(sum(quantity),0)::int n from production_reservations where delivery_date=$1 and (expires_at is null or expires_at>now())',[d])).rows[0].n;
  const limit=(await db.query('select coalesce((select capacity from production_limits where production_date=$1),120) n',[d])).rows[0].n;assert.ok(used<=limit);
+});
+
+test('user access requires admin, protects admins and retains historical orders',async()=>{
+ const id=await purchase(2,[plan(2)],other);
+ await assert.rejects(db.query('select set_user_access($1,$2,true)',[owner,other]));
+ await assert.rejects(db.query('select set_user_access($1,$2,true)',[admin,admin]));
+ await db.query('select set_user_access($1,$2,true)',[admin,other]);
+ assert.ok((await db.query('select disabled_at from profiles where id=$1',[other])).rows[0].disabled_at);
+ assert.ok(await get(id));
+ await assert.rejects(purchase(2,[plan(2)],other));
+ await assert.rejects(db.query('select reserve_checkout($1,$2)',[id,other]));
+ await assert.rejects(db.query('select schedule_purchase($1,$2,$3)',[id,other,'[]']));
+ await db.query('select set_user_access($1,$2,false)',[admin,other]);
+ assert.equal((await db.query('select disabled_at from profiles where id=$1',[other])).rows[0].disabled_at,null);
+ await purchase(2,[plan(2)],other);
+ await assert.rejects(purchase(2,[plan(2)],admin));
+ assert.equal((await db.query('select count(*)::int n from user_access_events where target_id=$1',[other])).rows[0].n,2);
+ await db.exec('begin; set local role authenticated;');
+ await assert.rejects(db.query('select set_user_access($1,$2,false)',[admin,other]));await db.exec('rollback;');
+});
+
+test('admins manage other admins, cannot disable themselves, and mutual disable keeps an active admin',async()=>{
+ const second='44444444-4444-4444-8444-444444444444';
+ await db.exec("insert into allowed_emails(email,role) values('admin2@test.local','admin')");
+ await db.query('insert into auth.users(id,email) values($1,$2)',[second,'admin2@test.local']);
+ await assert.rejects(db.query('select set_user_access($1,$1,true)',[second]));
+ await db.query('select set_user_access($1,$2,true)',[admin,second]);
+ await assert.rejects(db.query('select set_user_access($1,$2,true)',[second,admin]));
+ await assert.rejects(db.query('select set_shop_contact($1,$2)',[second,'5511999999999']));
+ await assert.rejects(db.query('select set_delivery_status($1,$2,$3,$4)',[second,crypto.randomUUID(),'test','preparing']));
+ await db.query('select set_user_access($1,$2,false)',[admin,second]);
+ const results=await Promise.allSettled([db.query('select set_user_access($1,$2,true)',[admin,second]),db.query('select set_user_access($1,$2,true)',[second,admin])]);
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+ const active=(await db.query("select id from profiles where role='admin' and disabled_at is null")).rows;
+ assert.equal(active.length,1);
+ const disabled=active[0].id===admin?second:admin;
+ await db.query('select set_user_access($1,$2,false)',[active[0].id,disabled]);
+ assert.equal((await db.query('select count(*)::int n from user_access_events where target_id=$1',[second])).rows[0].n>=2,true);
 });

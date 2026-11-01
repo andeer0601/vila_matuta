@@ -1,0 +1,5 @@
+import { addDateDays, Capacity, CapacityLimits, productionLimit } from './scheduling';
+export function monthStart(date:string){return date.slice(0,7)+'-01';}
+export function shiftMonth(date:string,offset:number){const d=new Date(monthStart(date)+'T12:00:00Z');d.setUTCMonth(d.getUTCMonth()+offset);return d.toISOString().slice(0,10);}
+export function monthDays(date:string){const first=monthStart(date);const weekday=new Date(first+'T12:00:00Z').getUTCDay();const start=addDateDays(first,-((weekday+6)%7));const last=addDateDays(shiftMonth(first,1),-1);const count=Math.ceil((((new Date(last+'T12:00:00Z').getTime()-new Date(start+'T12:00:00Z').getTime())/86400000)+1)/7)*7;return Array.from({length:count},(_,i)=>addDateDays(start,i));}
+export function productionDayStatus(date:string,limits:CapacityLimits,occupied:Capacity){const weekday=new Date(date+'T12:00:00Z').getUTCDay();if(productionLimit(date,limits)===0)return 'Bloqueada';if(![1,3,5].includes(weekday))return 'Sem produção';return (occupied[date]||0)>=productionLimit(date,limits)?'Lotada':'Disponível';}

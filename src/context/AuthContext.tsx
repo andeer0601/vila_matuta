@@ -19,7 +19,7 @@ export function AuthProvider({children}:{children:React.ReactNode}) {
   useEffect(()=>{
     if(DEMO_MODE) {
       const id=readLocal<string>('vm_demo_session', 'signed-out');if(id==='signed-out'){setLoading(false);return;}
-      setUser(readLocal<Record<string,Profile>>('vm_profiles',{})[id]||DEMO_PROFILES[id]||DEMO_PROFILES['user-customer-1']); setLoading(false); return;
+      const p=readLocal<Record<string,Profile>>('vm_profiles',{})[id]||DEMO_PROFILES[id];setUser(p&&!p.disabled_at?p:null); setLoading(false); return;
     }
     if(!process.env.NEXT_PUBLIC_SUPABASE_URL) {setLoading(false);return;}
     const supabase=createClient();
@@ -32,15 +32,25 @@ export function AuthProvider({children}:{children:React.ReactNode}) {
     const {data:{subscription}}=supabase.auth.onAuthStateChange(()=>{setTimeout(()=>void load(),0);});
     return ()=>subscription.unsubscribe();
   },[]);
-  useEffect(()=>{if(!DEMO_MODE||!user)return;const sync=()=>{if(readLocal<string>('vm_demo_session','signed-out')!==user.id)return;const p=readLocal<Record<string,Profile>>('vm_profiles',{})[user.id];if(p)setUser(p);};window.addEventListener('vm-update',sync);return()=>window.removeEventListener('vm-update',sync);},[user?.id]);
+  useEffect(()=>{
+    if(!user)return;
+    let active=true;
+    const sync=()=>{
+      if(DEMO_MODE){const id=readLocal<string>('vm_demo_session','signed-out');const p=readLocal<Record<string,Profile>>('vm_profiles',{})[id]||DEMO_PROFILES[id];setUser(p&&!p.disabled_at?p:null);}
+      else void api('/api/account').then(data=>{if(active)setUser(data.profile);}).catch(()=>{if(active)setUser(null);});
+    };
+    window.addEventListener('storage',sync);window.addEventListener('vm-update',sync);window.addEventListener('focus',sync);
+    const timer=setInterval(sync,30000);
+    return()=>{active=false;clearInterval(timer);window.removeEventListener('storage',sync);window.removeEventListener('vm-update',sync);window.removeEventListener('focus',sync);};
+  },[user?.id]);
   const loginAs:AuthState['loginAs']=(type)=>{
     if(!DEMO_MODE)return;
     const id=type==='admin'?'user-admin':type==='customer2'?'user-customer-2':'user-customer-1';
-    setUser(readLocal<Record<string,Profile>>('vm_profiles',{})[id]||DEMO_PROFILES[id]);writeLocal('vm_demo_session',id);
+    const profile=readLocal<Record<string,Profile>>('vm_profiles',{})[id]||DEMO_PROFILES[id];if(profile.disabled_at)throw new Error('Acesso desativado. Fale com a administração.');setUser(profile);writeLocal('vm_demo_session',id);
   };
   const updateProfile:AuthState['updateProfile']=async(data)=>{
     if(!user) throw new Error('Entre na sua conta.');
-    const {role,id,email,created_at,...editable}=data;
+    const {role,id,email,created_at,disabled_at,...editable}=data;
     if(!DEMO_MODE){const result=await api('/api/account',{action:'profile',profile:editable});setUser(result.profile);return;}
     if(editable.street)await saveAddress(user,{address:profileAddress({...user,...editable}),makePrimary:true});
     const next={...(readLocal<Record<string,Profile>>('vm_profiles',{})[user.id]||user),...editable};writeLocal('vm_profiles',{...readLocal<Record<string,Profile>>('vm_profiles',{}),[user.id]:next});setUser(next);

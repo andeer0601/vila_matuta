@@ -27,7 +27,7 @@ export async function demoLock<T>(fn:()=>T|Promise<T>):Promise<T>{if(navigator.l
 export async function getSettings():Promise<ShopSettings>{if(DEMO_MODE)return readLocal('vm_settings',{whatsapp:'',closures:[]});return api('/api/operations');}
 
 export async function operate(user:Profile,input:Record<string,unknown>){if(!DEMO_MODE)return api('/api/operations',input);if(user.role!=='admin')throw new Error('Acesso restrito.');return demoLock(()=>{
-
+ const current=readLocal<Record<string,Profile>>('vm_profiles',{})[user.id]||user;if(current.role!=='admin'||current.disabled_at)throw new Error('Acesso restrito.');
  const settings=readLocal<ShopSettings>('vm_settings',{whatsapp:'',closures:[]});const orders=readLocal<Order[]>(ORDER_STORAGE,[]);
 
  if(input.action==='whatsapp'){const phone=String(input.whatsapp||'').replace(/\D/g,'');if(phone&&!/^[0-9]{10,15}$/.test(phone))throw new Error('Informe DDI, DDD e telefone.');settings.whatsapp=phone;writeLocal('vm_settings',settings);}

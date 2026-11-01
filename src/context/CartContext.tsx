@@ -1,4 +1,5 @@
 'use client';
+import {assertCustomer} from '@/lib/access';
 import React, { createContext, useContext, useEffect, useMemo, useState, useRef } from 'react';
 import { CustomMealSelection, Order } from '@/types/database';
 import { calculateVolumePrice } from '@/lib/rules';
@@ -56,7 +57,7 @@ export function CartProvider({children}:{children:React.ReactNode}) {
     if(authLoading)return;
     const readDraft=(id:string)=>readLocal<PurchaseDraft|null>('vm_purchase_'+id,null)||migratePurchaseDraft(readLocal<CustomMealSelection[]>('vm_cart_'+id,[]),readLocal('vm_builder_'+id,null));
     const saved=readDraft(user?.id||'guest');const guest=user?readDraft('guest'):emptyPurchaseDraft();
-    const selection=choosePurchaseDraft(saved,guest,!!user);guestDraft.current=guest;
+    const selection=choosePurchaseDraft(saved,role==='admin'?emptyPurchaseDraft():guest,!!user&&role!=='admin');guestDraft.current=guest;
     setDraft(selection.draft);setDraftConflict(selection.conflict);setDraftOwner(owner);
     if(selection.consumeGuest){localStorage.setItem(storageKey(owner),JSON.stringify(selection.draft));clearGuest();}
     setOrders([]);void refresh().catch(()=>{});
@@ -64,6 +65,7 @@ export function CartProvider({children}:{children:React.ReactNode}) {
   useEffect(()=>{if(draftReady&&!draftConflict)localStorage.setItem(storageKey(owner),JSON.stringify(draft));},[draft,draftReady,draftConflict,owner]);
   useEffect(()=>{if(!DEMO_MODE)return;const sync=()=>void refresh().catch(()=>{});window.addEventListener('storage',sync);window.addEventListener('vm-update',sync);return()=>{window.removeEventListener('storage',sync);window.removeEventListener('vm-update',sync);};},[]);
   useEffect(()=>{if(authLoading)return;const timer=setInterval(()=>void refresh().catch(()=>{}),30000);return()=>clearInterval(timer);},[user?.id,authLoading]);
+  const requireBuyer=()=>assertCustomer(user&&DEMO_MODE?(readLocal<Record<string,typeof user>>('vm_profiles',{})[user.id]||user):user);
   const persist=(next:Order[])=>{writeLocal(STORAGE,next);setOrders(next);};
   const latest=():Order[]=>{try{return JSON.parse(localStorage.getItem(storageKey(STORAGE))||'[]');}catch{return [];}};
   const totalMealsCount=items.reduce((sum,i)=>sum+i.quantity,0);
@@ -73,7 +75,7 @@ export function CartProvider({children}:{children:React.ReactNode}) {
     const key=(i:Omit<CustomMealSelection,'tempId'>)=>[i.type,i.base?.id,i.protein?.id,...[i.side1?.id,i.side2?.id].sort(),i.completeDish?.id,i.specialInstructions||''].join('|');
     setItems(prev=>{const existing=prev.find(i=>key(i)===key(item));return existing?prev.map(i=>i.tempId===existing.tempId?{...i,quantity:i.quantity+item.quantity}:i):[...prev,{...item,tempId:crypto.randomUUID()}];});
   };
-  const createOrder:CartState['createOrder']=async(data)=>{
+  const createOrder:CartState['createOrder']=async(data)=>{requireBuyer();
     if(!user)throw new Error('Entre na sua conta antes de finalizar.');
     if(loadError)throw new Error(loadError);
     const error=validatePlan(items,data.deliveries,capacity,false,undefined,capacityLimits);if(error)throw new Error(error);
@@ -82,9 +84,10 @@ export function CartProvider({children}:{children:React.ReactNode}) {
     const order:Order={id,user_id:user.id,order_type:data.deliveries.length>1?'package':'single',status:'pending',total_amount:calculateVolumePrice(totalMealsCount).totalPrice,quantity_meals:totalMealsCount,delivery_date:data.deliveries[0]?.date||null,delivery_shift:user.preferred_delivery_period||null,payment_method:'pix',created_at:new Date().toISOString(),deliveries:data.deliveries.map(p=>({...p,preferred_period:user.preferred_delivery_period,address:profileAddress(user),address_mode:'primary',status:'scheduled'})),profile:user,notes:data.notes,
       shipping_address_snapshot:{recipient_name:user.full_name||'',recipient_phone:user.phone||'',cep:user.cep||'',street:user.street||'',number:user.number||'',neighborhood:user.neighborhood||'',city:user.city||'',state:user.state,complement:user.complement||''},
       items:items.map(i=>({id:i.tempId,order_id:id,item_type:i.type,name:i.name,base:i.base,protein:i.protein,side1:i.side1,side2:i.side2,complete_dish:i.completeDish,quantity:i.quantity,special_instructions:i.specialInstructions,created_at:new Date().toISOString()}))};
-    await demoLock(()=>persist([order,...latest()]));setDraft(emptyPurchaseDraft());return order;
+    await demoLock(()=>{assertCustomer(readLocal<Record<string,typeof user>>('vm_profiles',{})[user.id]||user);persist([order,...latest()]);});setDraft(emptyPurchaseDraft());return order;
   };
   const updateOrderStatus:CartState['updateOrderStatus']=async(id,status)=>demoLock(()=>{
+    requireBuyer();
     if(!DEMO_MODE)throw new Error('Alterações de pagamento são confirmadas pelo servidor.');
     const all=latest();const order=all.find(o=>o.id===id);if(!order||!(role==='admin'||order.user_id===user?.id))throw new Error('Pedido indisponível.');
     if(status==='paid'&&order.status==='pending'){
@@ -94,9 +97,9 @@ export function CartProvider({children}:{children:React.ReactNode}) {
     persist(all.map(o=>o.id===id?{...o,status,paid_at:status==='paid'?new Date().toISOString():o.paid_at}:o));
   });
   const updateOrderAdmin:CartState['updateOrderAdmin']=()=>{throw new Error('Use o planejamento de entregas para alterar datas sem exceder a produção.');};
-  const scheduleBalance:CartState['scheduleBalance']=async(id,plans)=>{
+  const scheduleBalance:CartState['scheduleBalance']=async(id,plans)=>{requireBuyer();
     if(!DEMO_MODE){await api('/api/orders/'+id+'/schedule',{deliveries:plans});await refresh();return;}
-    return demoLock(()=>{const all=latest();const order=all.find(o=>o.id===id&&o.user_id===user?.id);if(!order||!['paid','preparing','in_delivery','delivered','pending'].includes(order.status))throw new Error('Pedido indisponível.');
+    return demoLock(()=>{requireBuyer();const all=latest();const order=all.find(o=>o.id===id&&o.user_id===user?.id);if(!order||!['paid','preparing','in_delivery','delivered','pending'].includes(order.status))throw new Error('Pedido indisponível.');
     const pending=order.status==='pending';if(pending&&order.reservation_expires_at)throw new Error('Pagamento já iniciado. Fale com a equipe para alterar as datas.');
     plans=plans.map(p=>({...p,preferred_period:user!.preferred_delivery_period,address:profileAddress(user!),address_mode:'primary',status:'scheduled'}));
     const remaining=(order.items||[]).map(i=>({tempId:i.id,quantity:i.quantity-(pending?0:allocated(order.deliveries||[],i.id))})).filter(i=>i.quantity>0);
@@ -104,7 +107,7 @@ export function CartProvider({children}:{children:React.ReactNode}) {
     const error=validatePlan(remaining,plans,capacityFromOrders(all.filter(o=>o.id!==id)),false,undefined,settingsLimits(readLocal<ShopSettings>('vm_settings',{whatsapp:'',closures:[]})));if(error)throw new Error(error);
     persist(all.map(o=>o.id===id?{...o,deliveries:pending?plans:[...(o.deliveries||[]),...plans],delivery_date:pending?plans[0].date:o.delivery_date}:o));});
   };
-  const reservePayment=async(id:string)=>{if(!DEMO_MODE)return;await demoLock(()=>{const all=latest();const order=all.find(o=>o.id===id&&o.user_id===user?.id);if(!order||order.status!=='pending')throw new Error('Pedido indisponível.');if(order.reservation_expires_at&&Date.parse(order.reservation_expires_at)>Date.now())return;const error=validatePlan((order.items||[]).map(i=>({tempId:i.id,quantity:i.quantity})),order.deliveries||[],capacityFromOrders(all.filter(o=>o.id!==id)),false,undefined,settingsLimits(readLocal<ShopSettings>('vm_settings',{whatsapp:'',closures:[]})));if(error)throw new Error(error);order.reservation_expires_at=new Date(Date.now()+30*60000).toISOString();persist(all);});};
+  const reservePayment=async(id:string)=>{requireBuyer();if(!DEMO_MODE)return;await demoLock(()=>{requireBuyer();const all=latest();const order=all.find(o=>o.id===id&&o.user_id===user?.id);if(!order||order.status!=='pending')throw new Error('Pedido indisponível.');if(order.reservation_expires_at&&Date.parse(order.reservation_expires_at)>Date.now())return;const error=validatePlan((order.items||[]).map(i=>({tempId:i.id,quantity:i.quantity})),order.deliveries||[],capacityFromOrders(all.filter(o=>o.id!==id)),false,undefined,settingsLimits(readLocal<ShopSettings>('vm_settings',{whatsapp:'',closures:[]})));if(error)throw new Error(error);order.reservation_expires_at=new Date(Date.now()+30*60000).toISOString();persist(all);});};
   return <CartContext.Provider value={{draft,draftReady,draftConflict,resolveDraft,patchDraft,isLoading,loadError,reservePayment,items,orders,capacity,capacityLimits,totalMealsCount,pricing:calculateVolumePrice(totalMealsCount),creditsBalance,addItem,editItem:(id,item)=>setItems(prev=>prev.map(i=>i.tempId===id?{...item,tempId:id}:i)),updateItemQuantity:(id,delta)=>setItems(prev=>prev.map(i=>i.tempId===id?{...i,quantity:Math.max(2,i.quantity+delta)}:i)),removeItem:id=>setItems(prev=>prev.filter(i=>i.tempId!==id)),clearCart:()=>setDraft(emptyPurchaseDraft()),createOrder,updateOrderStatus,updateOrderAdmin,scheduleBalance,refresh}}>{children}</CartContext.Provider>;
 }
 export const useCart=()=>useContext(CartContext);

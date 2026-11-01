@@ -13,5 +13,7 @@ export async function POST(req:NextRequest){try{
  const auth=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
  const {data,error}=await auth.auth.signInWithPassword({email,password,options:{captchaToken}});
  if(error||!data.session)throw new ApiError('Não foi possível entrar. Confira seu e-mail, senha e a verificação de segurança.',401);
- return NextResponse.json({access_token:data.session.access_token,refresh_token:data.session.refresh_token},{headers:{'Cache-Control':'no-store','Pragma':'no-cache'}});
+ const {data:profile,error:profileError}=await db.from('profiles').select('disabled_at,role').eq('id',data.user.id).single();
+ if(profileError||!profile||profile.disabled_at){await auth.auth.signOut();throw new ApiError('Acesso indisponível. Fale com a administração.',403);}
+ return NextResponse.json({access_token:data.session.access_token,refresh_token:data.session.refresh_token,role:profile.role},{headers:{'Cache-Control':'no-store','Pragma':'no-cache'}});
 }catch(e){return failure(e);}}

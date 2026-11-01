@@ -1,3 +1,4 @@
+import {RoleBoundary} from '@/components/RoleBoundary';
 import {headers} from 'next/headers';
 import type { Metadata } from 'next';
 import './globals.css';
@@ -25,7 +26,7 @@ export default async function RootLayout({
         <AuthProvider>
           <CartProvider>
             <a href="#conteudo" className="skip-link">Pular para o conteúdo</a><Navbar />
-            <main id="conteudo" tabIndex={-1} className="flex-1 min-w-0">{children}</main>
+            <main id="conteudo" tabIndex={-1} className="flex-1 min-w-0"><RoleBoundary>{children}</RoleBoundary></main>
             <Footer />
           </CartProvider>
         </AuthProvider>

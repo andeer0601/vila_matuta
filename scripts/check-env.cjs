@@ -14,5 +14,6 @@ if(!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY)errors.push('Enable Turnstile for
 if(process.env.NEXT_PUBLIC_DEMO_MODE!=='false')errors.push('Set NEXT_PUBLIC_DEMO_MODE=false in deployed environments');
 const publicAllowed=new Set(['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SUPABASE_ANON_KEY','NEXT_PUBLIC_DEMO_MODE','NEXT_PUBLIC_TURNSTILE_SITE_KEY']);for(const key of Object.keys(process.env))if(key.startsWith('NEXT_PUBLIC_')&&!publicAllowed.has(key))errors.push('Review unexpected public environment variable: '+key);
 if(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY===process.env.SUPABASE_SERVICE_ROLE_KEY&&process.env.SUPABASE_SERVICE_ROLE_KEY)errors.push('Service key must NEVER be the public key');
+if(process.env.PAYMENTS_ENABLED==='true'&&!process.env.INFINITEPAY_API_KEY)errors.push('INFINITEPAY_API_KEY missing for single-use expiring links');
 if(process.env.PAYMENTS_ENABLED==='true'&&!process.env.INFINITEPAY_HANDLE)errors.push('INFINITEPAY_HANDLE missing');
 if(errors.length){console.error(errors.join('\n'));process.exitCode=1;}else console.log('Environment structure validated. Also verify Supabase CAPTCHA, RLS, SMTP, backups and WAF settings in their dashboards.');

@@ -19,6 +19,7 @@ export async function customer(req:NextRequest) {
   if(error||!user)throw new ApiError('Entre na sua conta.',401);
   await rateLimit(db,req.method==='GET'?'api-read':'api-write',user.id,req.method==='GET'?120:40,60);
   const {data:profile}=await db.from('profiles').select('*').eq('id',user.id).single();
+  if(profile?.disabled_at)throw new ApiError('Acesso desativado. Fale com a administração.',403);
   if(!profile)throw new ApiError('Entre na sua conta.',401);
   return {db,user,profile:{...reveal(profile,user.id),email:user.email||''}};
 }
@@ -47,3 +48,5 @@ export async function productionAvailability() {
  for(const r of closed.data||[])limits[r.production_date]=0;
  return {capacity,limits};
 }
+
+export async function purchasingCustomer(req:NextRequest){const result=await customer(req);if(result.profile.role!=='customer')throw new ApiError('Pedidos são exclusivos de contas de clientes.',403);return result;}
